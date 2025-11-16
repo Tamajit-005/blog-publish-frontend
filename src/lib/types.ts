@@ -14,6 +14,12 @@ export interface Author {
   email?: string;
 }
 
+// Writer interface
+export interface Writer {
+  username: string;
+  email?: string;
+}
+
 // Category interface
 export interface Category {
   documentId: string; 
@@ -34,6 +40,7 @@ export interface BlogPost {
   publishedAt?: string;
   cover?: ImageData;
   author?: Author;
+  writer?: Writer;
   category?: Category[];
 }
 

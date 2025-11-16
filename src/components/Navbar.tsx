@@ -5,25 +5,32 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FaSearch, FaTimes, FaBars } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
-import Image from "next/image";
+import { getMe } from "@/lib/getMe";
 
 const Navbar = () => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const router = useRouter();
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [user, setUser] = useState<any | null>(null);
 
-  // Hardcoded categories (replace with GraphQL query later)
-  const categories = [
-    { label: "Gaming", id: "zxhivhcsvvo4bwsv8lrijpop" },
-    { label: "Tech", id: "icchgazsjbhc07ogtzksx6dq" },
-    { label: "Food", id: "o5d6wlqkmmea2nkp17ziea7z" },
-    { label: "Nature", id: "kaigx15rehooagdlsb2q9x9k" },
-    { label: "Culture", id: "h1oaqs7skpgwx42u765xqrc2" },
-    { label: "Entertainment", id: "ynv7oa1i6v09tx54w7pfyrze" },
-  ];
+  const router = useRouter();
+
+  useEffect(() => {
+    async function loadUser() {
+      const me = await getMe();
+      setUser(me);
+    }
+    loadUser();
+  }, []);
+
+  // Convert username to initials (EX: "tamajit saha" → "TS")
+  const getInitials = (name: string | undefined) => {
+    if (!name) return "U";
+    const parts = name.split(" ");
+    if (parts.length === 1) return parts[0][0].toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,17 +40,6 @@ const Navbar = () => {
     setMenuOpen(false);
   };
 
-  const toggleDropdown = () => {
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    setDropdownOpen((prev) => !prev);
-  };
-
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    };
-  }, []);
-
   useEffect(() => {
     document.body.style.overflow = menuOpen || searchOpen ? "hidden" : "";
   }, [menuOpen, searchOpen]);
@@ -52,94 +48,84 @@ const Navbar = () => {
     <header className="bg-[#0f111a] text-white sticky top-0 z-50 shadow-md">
       <div className="max-w-6xl mx-auto flex items-center justify-between p-4">
         {/* Logo */}
-        <Link href="/" onClick={() => setDropdownOpen(false)}>
-          <Image
-            src="/images/Logo.png"
-            alt="Logo"
-            width={160}
-            height={50}
-            className="h-12 w-auto"
-            priority
-          />
+        <Link href="/">
+          <img src="/images/Logo.png" alt="Logo" className="h-12 w-auto" />
         </Link>
 
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-6 font-medium">
-          <Link
-            href="/"
-            className="hover:text-teal-400 transition-colors"
-            onClick={() => setDropdownOpen(false)}
-          >
+          <Link href="/blogs" className="hover:text-teal-400 transition-colors">
             Blogs
           </Link>
 
-          {/* Categories */}
-          <div
-            className="relative"
-            onMouseEnter={() => {
-              if (timeoutRef.current) clearTimeout(timeoutRef.current);
-              setDropdownOpen(true);
-            }}
-            onMouseLeave={() => {
-              if (timeoutRef.current) clearTimeout(timeoutRef.current);
-              timeoutRef.current = setTimeout(
-                () => setDropdownOpen(false),
-                200
-              );
-            }}
-          >
-            <button
-              onClick={toggleDropdown}
-              className="hover:text-teal-400 transition-colors"
-            >
-              Categories
-            </button>
-
-            <AnimatePresence>
-              {dropdownOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.2, ease: "easeInOut" }}
-                  className="absolute left-0 mt-2 bg-[#1a1c29] border border-gray-700 rounded-lg shadow-lg w-44 z-50"
-                >
-                  <ul className="py-2 text-sm">
-                    {categories.map((c) => (
-                      <li key={c.id}>
-                        <Link
-                          href={`/category/${encodeURIComponent(c.id)}`}
-                          className="block px-4 py-2 hover:bg-teal-700 hover:text-white transition-colors"
-                          onClick={() => setDropdownOpen(false)}
-                        >
-                          {c.label}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
           {/* Search */}
           <button
-            onClick={() => setSearchOpen((prev) => !prev)}
+            onClick={() => setSearchOpen(true)}
             className="text-xl hover:text-teal-400 transition-colors"
           >
             <FaSearch />
           </button>
 
-          {/* Placeholder for Auth0 login/logout */}
+          {/* Publish */}
           <button
             onClick={() => router.push("/create")}
             className="bg-teal-600 hover:bg-teal-500 px-4 py-2 rounded-md text-sm font-semibold text-white transition"
           >
             Publish
           </button>
+
+          {/* Profile */}
+          <div className="relative">
+            <button
+              onClick={() => setProfileOpen((prev) => !prev)}
+              className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-800 border border-gray-600 hover:border-teal-500 transition text-teal-300 font-bold"
+            >
+              {getInitials(user?.username)}
+            </button>
+
+            <AnimatePresence>
+              {profileOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.2 }}
+                  className="absolute right-0 mt-2 bg-[#1a1c29] w-48 rounded-lg shadow-lg border border-gray-700 text-sm z-50"
+                >
+                  <div className="px-4 py-3 border-b border-gray-700 text-gray-300">
+                    Logged in as
+                    <br />
+                    <span className="text-teal-400 font-medium">
+                      {user?.username ?? "Not logged in"}
+                    </span>
+                  </div>
+
+                  <Link
+                    href="/blogs"
+                    className="block px-4 py-2 hover:bg-teal-700 hover:text-white transition"
+                    onClick={() => setProfileOpen(false)}
+                  >
+                    Your Posts
+                  </Link>
+
+                  <button
+                    className="w-full text-left px-4 py-2 hover:bg-red-600 hover:text-white transition"
+                    onClick={() => {
+                      localStorage.removeItem("jwt");
+                      localStorage.removeItem("user");
+                      setProfileOpen(false);
+                      router.refresh();
+                    }}
+                  >
+                    Logout
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </nav>
 
-        {/* Mobile Hamburger */}
+        {/* Mobile Menu Toggle */}
         <button
           className="md:hidden text-2xl"
           onClick={() => setMenuOpen((prev) => !prev)}
@@ -152,58 +138,77 @@ const Navbar = () => {
       <AnimatePresence>
         {menuOpen && (
           <motion.div
-            key="mobile-menu"
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="fixed top-0 left-0 w-full h-full bg-[#0f111a] px-6 py-10 z-[99] flex flex-col gap-4 overflow-y-auto md:hidden"
+            transition={{ duration: 0.3 }}
+            className="fixed top-0 left-0 w-full h-full bg-[#0f111a] px-6 py-10 z-[99] flex flex-col gap-5 overflow-y-auto md:hidden"
           >
             <button
-              className="self-end text-2xl hover:text-teal-400 transition"
+              className="self-end text-2xl hover:text-teal-400"
               onClick={() => setMenuOpen(false)}
             >
               <FaTimes />
             </button>
 
             <Link
-              href="/"
-              onClick={() => setMenuOpen(false)}
+              href="/blogs"
               className="text-lg hover:text-teal-400"
+              onClick={() => setMenuOpen(false)}
             >
               Blogs
             </Link>
-
-            <div className="mt-4">
-              <p className="text-gray-400 text-sm uppercase">Categories</p>
-              {categories.map((c) => (
-                <Link
-                  key={c.id}
-                  href={`/category/${encodeURIComponent(c.id)}`}
-                  className="block py-2 hover:text-teal-400"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  {c.label}
-                </Link>
-              ))}
-            </div>
 
             <button
               onClick={() => {
                 setSearchOpen(true);
                 setMenuOpen(false);
               }}
-              className="flex items-center gap-2 text-lg hover:text-teal-400 mt-6"
+              className="flex items-center gap-2 text-lg hover:text-teal-400"
             >
               <FaSearch /> Search
             </button>
 
-            <button
-              onClick={() => router.push("/create")}
-              className="bg-teal-600 hover:bg-teal-500 w-fit px-4 py-2 rounded-md text-sm font-semibold text-white mt-4"
+            <Link
+              href="/create"
+              className="bg-teal-600 hover:bg-teal-500 w-fit px-4 py-2 rounded-md text-sm font-semibold text-white"
+              onClick={() => setMenuOpen(false)}
             >
               Publish Blog
-            </button>
+            </Link>
+
+            <div className="mt-6 border-t border-gray-700 pt-4">
+              <p className="text-gray-500 text-xs mb-2">Account</p>
+
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-gray-800 text-teal-300 font-bold flex items-center justify-center border border-gray-600">
+                  {getInitials(user?.username)}
+                </div>
+                <span className="text-gray-300 text-sm">
+                  {user?.username ?? "Not logged in"}
+                </span>
+              </div>
+
+              <Link
+                href="/blogs"
+                className="block py-2 hover:text-teal-400"
+                onClick={() => setMenuOpen(false)}
+              >
+                Your Posts
+              </Link>
+
+              <button
+                className="text-left py-2 text-red-400 hover:text-red-500"
+                onClick={() => {
+                  localStorage.removeItem("jwt");
+                  localStorage.removeItem("user");
+                  setMenuOpen(false);
+                  router.refresh();
+                }}
+              >
+                Logout
+              </button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -212,11 +217,10 @@ const Navbar = () => {
       <AnimatePresence>
         {searchOpen && (
           <motion.div
-            key="search-modal"
             initial={{ opacity: 0, y: -25 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -25 }}
-            transition={{ duration: 0.3, ease: "easeInOut" }}
+            transition={{ duration: 0.3 }}
             className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm"
           >
             <form
@@ -233,14 +237,14 @@ const Navbar = () => {
               />
               <button
                 type="submit"
-                className="absolute right-9 top-1/2 -translate-y-1/2 text-teal-400 text-2xl hover:text-teal-300 transition"
+                className="absolute right-9 top-1/2 -translate-y-1/2 text-teal-400 text-2xl hover:text-teal-300"
               >
                 <FaSearch />
               </button>
               <button
                 type="button"
                 onClick={() => setSearchOpen(false)}
-                className="absolute -top-10 right-2 text-white text-2xl hover:text-red-500 transition"
+                className="absolute -top-10 right-2 text-white text-2xl hover:text-red-500"
               >
                 <FaTimes />
               </button>

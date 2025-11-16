@@ -40,7 +40,7 @@ export default function HomePage() {
         </Link>
 
         <Link
-          href="/api/auth/login"
+          href="/login"
           className="px-6 py-3 border border-teal-500 text-teal-400 rounded-lg hover:bg-teal-500 hover:text-slate-900 font-semibold transition-all duration-200"
         >
           Login to Publish

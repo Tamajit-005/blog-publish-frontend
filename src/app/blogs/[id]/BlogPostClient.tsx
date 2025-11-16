@@ -3,13 +3,13 @@
 import { motion } from "framer-motion";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkBreaks from "remark-breaks";
+import rehypeRaw from "rehype-raw";
 import moment from "moment";
 import Link from "next/link";
 import type { BlogPost } from "@/lib/types";
 
-/**
- * Builds a full Strapi asset URL for local/remote images.
- */
+/** Builds full Strapi asset URL */
 function buildAssetUrl(path?: string): string | undefined {
   if (!path) return undefined;
   if (/^https?:\/\//i.test(path)) return path;
@@ -97,7 +97,9 @@ export default function BlogPostClient({ post }: { post: BlogPost }) {
           </motion.p>
         )}
 
-        {/* Markdown Content */}
+        {/* ------------------------------ */}
+        {/*        MARKDOWN CONTENT        */}
+        {/* ------------------------------ */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -105,7 +107,8 @@ export default function BlogPostClient({ post }: { post: BlogPost }) {
           className="prose prose-invert max-w-none leading-relaxed"
         >
           <Markdown
-            remarkPlugins={[remarkGfm]}
+            remarkPlugins={[remarkGfm, remarkBreaks]}
+            rehypePlugins={[rehypeRaw]}
             components={{
               h1: ({ children }) => (
                 <h1 className="text-3xl font-bold text-teal-400 mt-10 mb-4 border-b border-teal-800 pb-2">
@@ -126,10 +129,35 @@ export default function BlogPostClient({ post }: { post: BlogPost }) {
                 <p className="text-gray-300 leading-relaxed my-3">{children}</p>
               ),
               code: ({ children }) => (
-                <code className="bg-slate-800/70 text-teal-300 px-1 py-0.5 rounded">
+                <code className="bg-slate-800/70 text-teal-300 px-2 py-1 rounded block my-2 whitespace-pre">
                   {children}
                 </code>
               ),
+
+              /** FIX — Blockquotes */
+              blockquote: ({ children }) => (
+                <blockquote className="border-l-4 border-teal-500 pl-4 ml-2 italic text-gray-400 my-4">
+                  {children}
+                </blockquote>
+              ),
+
+              /** FIX — Underline (raw HTML) */
+              u: ({ children }) => (
+                <u className="underline decoration-teal-500">{children}</u>
+              ),
+
+              /** FIX — Newlines behave like Strapi */
+              text: ({ children }) =>
+                String(children).includes("\n")
+                  ? String(children)
+                      .split("\n")
+                      .map((line, i) => (
+                        <span key={i}>
+                          {line}
+                          <br />
+                        </span>
+                      ))
+                  : children,
             }}
           >
             {post.content || ""}
@@ -143,20 +171,21 @@ export default function BlogPostClient({ post }: { post: BlogPost }) {
           transition={{ delay: 0.5 }}
           className="flex flex-col items-center justify-center text-gray-400 font-light mb-6 mt-8 text-sm"
         >
-          {post.author?.name && (
+          {(post.author?.name || post.writer?.username) && (
             <p>
               Written by{" "}
               <span className="font-medium text-teal-300">
-                {post.author.name}
+                {post.author?.name || post.writer?.username}
               </span>
               {post.createdAt && <> — {moment(post.createdAt).fromNow()}</>}
             </p>
           )}
-          {post.author?.email && (
+
+          {(post.author?.email || post.writer?.email) && (
             <p className="text-gray-400 mt-1">
               Contact:{" "}
               <span className="font-medium text-teal-500">
-                {post.author.email}
+                {post.author?.email || post.writer?.email}
               </span>
             </p>
           )}

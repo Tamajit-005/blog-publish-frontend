@@ -22,6 +22,10 @@ export const GET_ALL_POSTS = gql`
         name
         email
       }
+      writer {
+        username
+        email
+      }
       createdAt
       updatedAt
     }
@@ -49,13 +53,43 @@ export const GET_POST_BY_DOCUMENT_ID = gql`
         name
         email
       }
+      writer {
+        username
+        email
+      }
       createdAt
       updatedAt
     }
   }
 `;
 
-// SINGLE CATEGORY BY DOCUMENT ID WITH BLOGS 
+// BLOG POSTS BY LOGGED IN USER
+export const GET_MY_POSTS = gql`
+  query GetMyPosts($email: String!) {
+    blogs(filters: { writer: { email: { eq: $email } } }) {
+      title
+      documentId
+      slug
+      description
+      content
+      category {
+        documentId
+        name
+      }
+      cover {
+        url
+      }
+      writer {
+        username
+        email
+      }
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+// SINGLE CATEGORY BY DOCUMENT ID WITH BLOGS
 export const GET_CATEGORY_BY_DOCUMENT_ID = gql`
   query GetCategoryByDocumentId($documentId: ID!) {
     category(documentId: $documentId) {
@@ -74,14 +108,12 @@ export const GET_CATEGORY_BY_DOCUMENT_ID = gql`
           updatedAt
           cover { url }
           author { name email }
-          # If you need categories on each blog card, add:
-          # category { documentId name slug description }
+          writer { username email }
         }
       }
     }
   }
 `;
-
 
 // ALL CATEGORIES (flat)
 export const GET_ALL_CATEGORIES = gql`
@@ -98,8 +130,10 @@ export const GET_ALL_CATEGORIES = gql`
   }
 `;
 
+// -----------------------------
+// TS TYPES
+// -----------------------------
 
-// TypeScript types for data
 export type ImageData = {
   url: string;
   alternativeText?: string | null;
@@ -111,7 +145,11 @@ export type ImageData = {
 
 export type Author = {
   name: string;
-  // Optional email field
+  email?: string | null;
+};
+
+export type Writer = {
+  username: string;
   email?: string | null;
 };
 
@@ -122,7 +160,6 @@ export type Category = {
   description?: string | null;
 };
 
-// Blog Post type
 export type BlogPost = {
   documentId: string;
   title: string;
@@ -133,7 +170,8 @@ export type BlogPost = {
   updatedAt?: string;
   publishedAt?: string;
   cover?: ImageData;
-  author?: Author;
+  author?: Author | null;
+  writer?: Writer | null;
   category?: Category[];
 };
 
@@ -145,9 +183,10 @@ export type GetAllPostsResult = {
     slug?: string | null;
     description?: string | null;
     content?: string | null;
-    category?: Category[]; // returned as array in your schema
+    category?: Category[];
     cover?: { url?: string | null } | null;
     author?: { name: string; email?: string | null } | null;
+    writer?: { username: string; email?: string | null } | null;
     createdAt?: string | null;
     updatedAt?: string | null;
   }>;
@@ -163,6 +202,7 @@ export type GetPostByDocumentIdResult = {
     category?: Category[];
     cover?: { url?: string | null } | null;
     author?: { name: string; email?: string | null } | null;
+    writer?: { username: string; email?: string | null } | null;
     createdAt?: string | null;
     updatedAt?: string | null;
   };
@@ -186,13 +226,13 @@ export type GetCategoryByDocumentIdResult = {
         updatedAt?: string | null;
         cover?: { url?: string | null } | null;
         author?: { name: string; email?: string | null } | null;
+        writer?: { username: string; email?: string | null } | null;
       }>;
     } | null;
   };
 };
 
-
-// GET_ALL_CATEGORIES (flat)
+// GET_ALL_CATEGORIES
 export type GetAllCategoriesResult = {
   categories: Array<{
     documentId: string;
