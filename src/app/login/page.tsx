@@ -1,97 +1,216 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { loginUser } from "@/lib/strapiAuth";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
+import { Eye, EyeOff } from "lucide-react";
 
 export default function LoginPage() {
-  const router = useRouter();
-  const [identifier, setIdentifier] = useState("");
-  const [password, setPassword] = useState("");
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+  });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
-  async function handleLogin(e: React.FormEvent) {
+  // Read ?returnTo=/some/path from URL, default to "/"
+  const searchParams = useSearchParams();
+  const returnTo = searchParams.get("returnTo") || "/";
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
     setLoading(true);
+    setError("");
 
     try {
-      await loginUser(identifier.trim(), password.trim());
-      router.refresh();
-      router.push("/create");
+      // Step 1: Authenticate with Auth0
+      const res = await fetch("/api/auth/custom-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Login failed");
+      }
+
+      console.log("✅ Login successful:", data.user?.email);
+
+      // Step 2: Store session in localStorage (dev)
+      localStorage.setItem("custom_user", JSON.stringify(data.user));
+      localStorage.setItem("custom_access_token", data.accessToken);
+
+      // Step 3: Redirect back to the page that requested login
+      window.location.href = returnTo;
     } catch (err: any) {
-      setError(err.message || "Invalid credentials. Try again.");
-    } finally {
+      setError(err.message || "Login failed");
       setLoading(false);
     }
-  }
+  };
 
   return (
-    <motion.main
-      initial={{ opacity: 0, y: 40 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6 }}
-      className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-gray-100 px-4"
-    >
-      <motion.h1
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="text-4xl font-bold text-teal-400 mb-6"
-      >
-        Welcome Back
-      </motion.h1>
-
-      <motion.form
-        initial={{ opacity: 0, scale: 0.96 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ delay: 0.2, duration: 0.5 }}
-        onSubmit={handleLogin}
-        className="w-full max-w-sm flex flex-col gap-4 bg-gray-900 p-6 rounded-lg shadow-lg border border-gray-800"
-      >
-        <input
-          type="text"
-          placeholder="Email"
-          value={identifier}
-          onChange={(e) => setIdentifier(e.target.value)}
-          className="p-3 rounded-md bg-gray-800 border border-gray-700 focus:border-teal-400 text-gray-100 placeholder-gray-500"
-          required
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="p-3 rounded-md bg-gray-800 border border-gray-700 focus:border-teal-400 text-gray-100 placeholder-gray-500"
-          required
-        />
-
-        {error && <p className="text-red-500 text-sm font-medium">{error}</p>}
-
-        <button
-          type="submit"
-          disabled={loading}
-          className={`bg-teal-500 hover:bg-teal-400 text-gray-900 font-semibold py-3 rounded-md transition ${
-            loading ? "opacity-60 cursor-not-allowed" : ""
-          }`}
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+      <div className="max-w-md w-full">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="text-center mb-8"
         >
-          {loading ? "Logging in..." : "Login"}
-        </button>
-      </motion.form>
+          <h1 className="text-4xl md:text-5xl font-bold text-teal-400 mb-3">
+            Welcome Back
+          </h1>
+          <p className="text-gray-400">
+            Log in to continue to Palette Publisher
+          </p>
+        </motion.div>
 
-      <motion.p
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.4 }}
-        className="mt-4 text-gray-400 text-sm"
-      >
-        Don’t have an account?{" "}
-        <a href="/register" className="text-teal-400 hover:underline">
-          Create one
-        </a>
-      </motion.p>
-    </motion.main>
+        {/* Form Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, duration: 0.5 }}
+          className="bg-slate-900 rounded-lg p-8 shadow-2xl border border-slate-800"
+        >
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Email Field */}
+            <div>
+              <label className="block text-gray-300 mb-2 font-medium text-sm">
+                Email Address
+              </label>
+              <input
+                type="email"
+                value={formData.email}
+                onChange={(e) =>
+                  setFormData({ ...formData, email: e.target.value })
+                }
+                required
+                disabled={loading}
+                autoComplete="email"
+                className="w-full p-3 rounded-md bg-slate-800 text-gray-100 border border-slate-700 focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 focus:outline-none transition disabled:opacity-50 disabled:cursor-not-allowed"
+                placeholder="your@email.com"
+              />
+            </div>
+
+            {/* Password Field */}
+            <div>
+              <label className="block text-gray-300 mb-2 font-medium text-sm">
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={formData.password}
+                  onChange={(e) =>
+                    setFormData({ ...formData, password: e.target.value })
+                  }
+                  required
+                  disabled={loading}
+                  autoComplete="current-password"
+                  className="w-full p-3 pr-12 rounded-md bg-slate-800 text-gray-100 border border-slate-700 focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 focus:outline-none transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  placeholder="Enter your password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300 transition"
+                  tabIndex={-1}
+                  disabled={loading}
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-5 h-5" />
+                  ) : (
+                    <Eye className="w-5 h-5" />
+                  )}
+                </button>
+              </div>
+              <div className="flex justify-end mt-2">
+                <a
+                  href="https://palettepublisher.us.auth0.com/dbconnections/change_password"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-teal-400 hover:text-teal-300 transition-colors"
+                >
+                  Forgot password?
+                </a>
+              </div>
+            </div>
+
+            {/* Error Message */}
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-red-500/10 border border-red-500/50 text-red-400 p-3 rounded-md text-sm flex items-start gap-2"
+              >
+                <span className="text-lg">⚠️</span>
+                <span>{error}</span>
+              </motion.div>
+            )}
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-teal-500 hover:bg-teal-400 text-slate-900 font-semibold py-3 rounded-lg shadow-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-teal-500"
+            >
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg
+                    className="animate-spin h-5 w-5"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  Logging in...
+                </span>
+              ) : (
+                "Log In"
+              )}
+            </button>
+          </form>
+
+          {/* Signup Link */}
+          <p className="text-center text-gray-400 mt-6 text-sm">
+            Don't have an account?{" "}
+            <Link
+              href={`/signup?returnTo=${encodeURIComponent(returnTo)}`}
+              className="text-teal-400 hover:text-teal-300 font-medium transition-colors"
+            >
+              Sign Up
+            </Link>
+          </p>
+        </motion.div>
+
+        {/* Footer Note */}
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.6 }}
+          className="text-center text-gray-600 text-xs mt-6"
+        >
+          Protected by Auth0 • Secure authentication
+        </motion.p>
+      </div>
+    </div>
   );
 }

@@ -3,9 +3,6 @@ import EditBlogClient from "./EditBlogClient";
 const STRAPI_BASE =
   process.env.NEXT_PUBLIC_STRAPI_URL || "http://localhost:1337";
 
-/* -------------------------------------------------------
-   Fetch single blog (REST)
-------------------------------------------------------- */
 async function fetchBlog(documentId: string) {
   const res = await fetch(`${STRAPI_BASE}/api/blogs/${documentId}?populate=*`, {
     cache: "no-store",
@@ -14,35 +11,24 @@ async function fetchBlog(documentId: string) {
   if (!res.ok) return null;
 
   const json = await res.json();
-  const data = json?.data;
 
-  if (!data) return null;
+  const d = json.data;
+  if (!d) return null;
 
   return {
-    documentId: data.documentId,
-    title: data.title,
-    description: data.description,
-    content: data.content,
-    createdAt: data.createdAt,
-    updatedAt: data.updatedAt,
-
-    // FIXED → REST uses categories (plural)
-    categories: data.categories || [],
-
-    cover: data.cover
-      ? {
-          url: data.cover.url,
-        }
-      : null,
-
-    author: data.author || null,
-    writer: data.writer || null,
+    documentId: d.documentId,
+    title: d.title,
+    description: d.description,
+    content: d.content,
+    createdAt: d.createdAt,
+    updatedAt: d.updatedAt,
+    cover: d.cover ? { url: d.cover.url } : null,
+    category: d.category || [],
+    author: d.author || null,
+    writer: d.writer || null,
   };
 }
 
-/* -------------------------------------------------------
-   PAGE
-------------------------------------------------------- */
 export default async function EditBlogPage({
   params,
 }: {
@@ -52,7 +38,7 @@ export default async function EditBlogPage({
 
   if (!blog) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-gray-400">
+      <div className="min-h-screen bg-slate-950 text-gray-300 flex items-center justify-center">
         Blog not found.
       </div>
     );

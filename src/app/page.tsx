@@ -23,7 +23,7 @@ export default function HomePage() {
       >
         Create, edit, and publish your blogs with complete control.
         <br />
-        Your stories deserve the spotlight — we’ll handle the rest.
+        Your stories deserve the spotlight — we'll handle the rest.
       </motion.p>
 
       <motion.div
@@ -39,12 +39,13 @@ export default function HomePage() {
           Explore Blogs
         </Link>
 
-        <Link
+        {/* Changed to Auth0 login */}
+        <a
           href="/login"
           className="px-6 py-3 border border-teal-500 text-teal-400 rounded-lg hover:bg-teal-500 hover:text-slate-900 font-semibold transition-all duration-200"
         >
           Login to Publish
-        </Link>
+        </a>
       </motion.div>
 
       <footer className="mt-16 text-sm text-gray-600">

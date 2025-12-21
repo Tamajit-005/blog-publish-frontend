@@ -54,15 +54,6 @@ export default function AboutPage() {
             depth needed to move with confidence.
           </p>
         </div>
-
-        <div className="text-center mt-10">
-          <a
-            href="/blogs"
-            className="text-teal-500 font-medium hover:text-teal-300 hover:underline transition"
-          >
-            Explore your latest publications →
-          </a>
-        </div>
       </div>
     </motion.div>
   );
