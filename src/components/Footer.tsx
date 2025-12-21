@@ -3,25 +3,15 @@ import { FaTwitter, FaGithub, FaInstagram } from "react-icons/fa";
 import Image from "next/image";
 
 export default function Footer() {
-  // Static category list (replace later with GraphQL fetch)
-  const categories = [
-    { label: "Gaming", id: "zxhivhcsvvo4bwsv8lrijpop" },
-    { label: "Tech", id: "icchgazsjbhc07ogtzksx6dq" },
-    { label: "Food", id: "o5d6wlqkmmea2nkp17ziea7z" },
-    { label: "Nature", id: "kaigx15rehooagdlsb2q9x9k" },
-    { label: "Culture", id: "h1oaqs7skpgwx42u765xqrc2" },
-    { label: "Entertainment", id: "ynv7oa1i6v09tx54w7pfyrze" },
-  ];
-
   return (
     <footer className="bg-[#0f111a] text-gray-300 py-10 border-t border-gray-800 mt-10">
-      <div className="max-w-6xl mx-auto px-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8">
-        {/* Logo and tagline */}
+      <div className="max-w-6xl mx-auto px-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8">
+        {/* Logo & Tagline */}
         <div>
           <Link href="/" className="inline-block">
             <Image
               src="/images/Logo.png"
-              alt="Post Palette Logo"
+              alt="Palette Publisher Logo"
               width={200}
               height={50}
               className="h-12 w-auto md:h-13"
@@ -29,8 +19,8 @@ export default function Footer() {
             />
           </Link>
           <p className="mt-3 text-sm text-gray-400 leading-relaxed">
-            A place where creators can publish, edit, and explore blogs — built
-            with Strapi, Next.js & GraphQL.
+            A streamlined platform for publishing, managing, and exploring
+            content — powered by Strapi, GraphQL, and Next.js.
           </p>
         </div>
 
@@ -39,7 +29,7 @@ export default function Footer() {
           <h2 className="font-semibold text-white mb-3">Quick Links</h2>
           <ul className="flex flex-col gap-2 text-sm">
             <li>
-              <Link href="/" className="hover:text-teal-400 transition">
+              <Link href="/blogs" className="hover:text-teal-400 transition">
                 Blogs
               </Link>
             </li>
@@ -61,25 +51,7 @@ export default function Footer() {
           </ul>
         </div>
 
-        {/* Categories */}
-        <div>
-          <h2 className="font-semibold text-white mb-3">Categories</h2>
-          <ul className="flex flex-col gap-2 text-sm">
-            {categories.map((c) => (
-              <li key={c.id}>
-                <Link
-                  href={`/category/${encodeURIComponent(c.id)}`}
-                  className="hover:text-teal-400 transition"
-                  prefetch={false}
-                >
-                  {c.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Social */}
+        {/* Social Links */}
         <div>
           <h2 className="font-semibold text-white mb-3">Follow Us</h2>
           <div className="flex gap-4">
@@ -111,7 +83,7 @@ export default function Footer() {
         </div>
       </div>
 
-      {/* Bottom */}
+      {/* Bottom Bar */}
       <div className="mt-10 text-center text-gray-500 text-xs sm:text-sm border-t border-gray-800 pt-6">
         © {new Date().getFullYear()}{" "}
         <span className="text-teal-400 font-medium">Palette Publisher</span>.

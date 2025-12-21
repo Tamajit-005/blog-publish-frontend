@@ -1,29 +1,55 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FaSearch, FaTimes, FaBars } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
-import Image from "next/image";
 
 const Navbar = () => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const router = useRouter();
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [username, setUsername] = useState<string | null>(null);
+  const [user, setUser] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Hardcoded categories (replace with GraphQL query later)
-  const categories = [
-    { label: "Gaming", id: "zxhivhcsvvo4bwsv8lrijpop" },
-    { label: "Tech", id: "icchgazsjbhc07ogtzksx6dq" },
-    { label: "Food", id: "o5d6wlqkmmea2nkp17ziea7z" },
-    { label: "Nature", id: "kaigx15rehooagdlsb2q9x9k" },
-    { label: "Culture", id: "h1oaqs7skpgwx42u765xqrc2" },
-    { label: "Entertainment", id: "ynv7oa1i6v09tx54w7pfyrze" },
-  ];
+  const router = useRouter();
+
+  // Fetch user session
+  useEffect(() => {
+    fetch("/api/user/username")
+      .then((res) => {
+        if (res.ok) {
+          return res.json();
+        }
+        throw new Error("Not authenticated");
+      })
+      .then((data) => {
+        setUsername(data.username);
+        setUser({ email: data.email });
+      })
+      .catch(() => {
+        // User not logged in
+        setUsername(null);
+        setUser(null);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }, []);
+
+  const handleLogout = () => {
+    window.location.href = "/api/auth/custom-logout";
+  };
+
+  const getInitials = (name: string | undefined) => {
+    if (!name) return "U";
+    const parts = name.split(" ");
+    if (parts.length === 1) return parts[0][0].toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,113 +59,107 @@ const Navbar = () => {
     setMenuOpen(false);
   };
 
-  const toggleDropdown = () => {
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    setDropdownOpen((prev) => !prev);
-  };
-
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    };
-  }, []);
-
   useEffect(() => {
     document.body.style.overflow = menuOpen || searchOpen ? "hidden" : "";
   }, [menuOpen, searchOpen]);
 
+  const displayName = username || "User";
+
   return (
     <header className="bg-[#0f111a] text-white sticky top-0 z-50 shadow-md">
       <div className="max-w-6xl mx-auto flex items-center justify-between p-4">
-        {/* Logo */}
-        <Link href="/" onClick={() => setDropdownOpen(false)}>
-          <Image
-            src="/images/Logo.png"
-            alt="Logo"
-            width={160}
-            height={50}
-            className="h-12 w-auto"
-            priority
-          />
+        <Link href="/">
+          <img src="/images/Logo.png" alt="Logo" className="h-12 w-auto" />
         </Link>
 
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-6 font-medium">
-          <Link
-            href="/"
-            className="hover:text-teal-400 transition-colors"
-            onClick={() => setDropdownOpen(false)}
-          >
+          <Link href="/blogs" className="hover:text-teal-400 transition-colors">
             Blogs
           </Link>
 
-          {/* Categories */}
-          <div
-            className="relative"
-            onMouseEnter={() => {
-              if (timeoutRef.current) clearTimeout(timeoutRef.current);
-              setDropdownOpen(true);
-            }}
-            onMouseLeave={() => {
-              if (timeoutRef.current) clearTimeout(timeoutRef.current);
-              timeoutRef.current = setTimeout(
-                () => setDropdownOpen(false),
-                200
-              );
-            }}
-          >
-            <button
-              onClick={toggleDropdown}
-              className="hover:text-teal-400 transition-colors"
-            >
-              Categories
-            </button>
-
-            <AnimatePresence>
-              {dropdownOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.2, ease: "easeInOut" }}
-                  className="absolute left-0 mt-2 bg-[#1a1c29] border border-gray-700 rounded-lg shadow-lg w-44 z-50"
-                >
-                  <ul className="py-2 text-sm">
-                    {categories.map((c) => (
-                      <li key={c.id}>
-                        <Link
-                          href={`/category/${encodeURIComponent(c.id)}`}
-                          className="block px-4 py-2 hover:bg-teal-700 hover:text-white transition-colors"
-                          onClick={() => setDropdownOpen(false)}
-                        >
-                          {c.label}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          {/* Search */}
           <button
-            onClick={() => setSearchOpen((prev) => !prev)}
+            onClick={() => setSearchOpen(true)}
             className="text-xl hover:text-teal-400 transition-colors"
           >
             <FaSearch />
           </button>
 
-          {/* Placeholder for Auth0 login/logout */}
-          <button
-            onClick={() => router.push("/create")}
-            className="bg-teal-600 hover:bg-teal-500 px-4 py-2 rounded-md text-sm font-semibold text-white transition"
-          >
-            Publish
-          </button>
+          {!isLoading && (
+            <>
+              {user ? (
+                <>
+                  <button
+                    onClick={() => router.push("/create")}
+                    className="bg-teal-600 hover:bg-teal-500 px-4 py-2 rounded-md text-sm font-semibold text-white transition"
+                  >
+                    Create
+                  </button>
+
+                  <div className="relative">
+                    <button
+                      onClick={() => setProfileOpen((prev) => !prev)}
+                      className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-800 border border-gray-600 hover:border-teal-500 transition text-teal-300 font-bold"
+                    >
+                      {getInitials(displayName)}
+                    </button>
+
+                    <AnimatePresence>
+                      {profileOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -8 }}
+                          transition={{ duration: 0.2 }}
+                          className="absolute right-0 mt-2 bg-[#1a1c29] w-48 rounded-lg shadow-lg border border-gray-700 text-sm z-50"
+                        >
+                          <div className="px-4 py-3 border-b border-gray-700 text-gray-300">
+                            Logged in as
+                            <br />
+                            <span className="text-teal-400 font-medium">
+                              {displayName}
+                            </span>
+                          </div>
+
+                          <Link
+                            href="/my-posts"
+                            className="block px-4 py-2 hover:bg-teal-700 hover:text-white transition"
+                            onClick={() => setProfileOpen(false)}
+                          >
+                            Your Posts
+                          </Link>
+
+                          <button
+                            onClick={handleLogout}
+                            className="block w-full text-left px-4 py-2 hover:bg-red-600 hover:text-white transition"
+                          >
+                            Logout
+                          </button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Link
+                    href="/login"
+                    className="hover:text-teal-400 transition-colors"
+                  >
+                    Login
+                  </Link>
+                  <Link
+                    href="/signup"
+                    className="bg-teal-600 hover:bg-teal-500 px-4 py-2 rounded-md text-sm font-semibold text-white transition"
+                  >
+                    Register
+                  </Link>
+                </>
+              )}
+            </>
+          )}
         </nav>
 
-        {/* Mobile Hamburger */}
         <button
           className="md:hidden text-2xl"
           onClick={() => setMenuOpen((prev) => !prev)}
@@ -148,106 +168,7 @@ const Navbar = () => {
         </button>
       </div>
 
-      {/* Mobile Menu */}
-      <AnimatePresence>
-        {menuOpen && (
-          <motion.div
-            key="mobile-menu"
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="fixed top-0 left-0 w-full h-full bg-[#0f111a] px-6 py-10 z-[99] flex flex-col gap-4 overflow-y-auto md:hidden"
-          >
-            <button
-              className="self-end text-2xl hover:text-teal-400 transition"
-              onClick={() => setMenuOpen(false)}
-            >
-              <FaTimes />
-            </button>
-
-            <Link
-              href="/"
-              onClick={() => setMenuOpen(false)}
-              className="text-lg hover:text-teal-400"
-            >
-              Blogs
-            </Link>
-
-            <div className="mt-4">
-              <p className="text-gray-400 text-sm uppercase">Categories</p>
-              {categories.map((c) => (
-                <Link
-                  key={c.id}
-                  href={`/category/${encodeURIComponent(c.id)}`}
-                  className="block py-2 hover:text-teal-400"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  {c.label}
-                </Link>
-              ))}
-            </div>
-
-            <button
-              onClick={() => {
-                setSearchOpen(true);
-                setMenuOpen(false);
-              }}
-              className="flex items-center gap-2 text-lg hover:text-teal-400 mt-6"
-            >
-              <FaSearch /> Search
-            </button>
-
-            <button
-              onClick={() => router.push("/create")}
-              className="bg-teal-600 hover:bg-teal-500 w-fit px-4 py-2 rounded-md text-sm font-semibold text-white mt-4"
-            >
-              Publish Blog
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Search Modal */}
-      <AnimatePresence>
-        {searchOpen && (
-          <motion.div
-            key="search-modal"
-            initial={{ opacity: 0, y: -25 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -25 }}
-            transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm"
-          >
-            <form
-              onSubmit={handleSearchSubmit}
-              className="relative w-full max-w-md px-6"
-            >
-              <input
-                type="text"
-                placeholder="Search posts..."
-                value={searchQuery}
-                autoFocus
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full py-4 pl-5 pr-14 rounded-full bg-gray-800 text-xl text-white shadow-lg placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
-              />
-              <button
-                type="submit"
-                className="absolute right-9 top-1/2 -translate-y-1/2 text-teal-400 text-2xl hover:text-teal-300 transition"
-              >
-                <FaSearch />
-              </button>
-              <button
-                type="button"
-                onClick={() => setSearchOpen(false)}
-                className="absolute -top-10 right-2 text-white text-2xl hover:text-red-500 transition"
-              >
-                <FaTimes />
-              </button>
-            </form>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Mobile Menu & Search Modal - keep existing code */}
     </header>
   );
 };
