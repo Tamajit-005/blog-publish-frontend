@@ -65,14 +65,13 @@ async function afterCallback(req: NextRequest, session: any) {
     session.user.username = mongoUser.username;
 
   } catch (err) {
-    // Do NOT break Auth0 callback
     console.error("MongoDB sync failed:", err);
   }
 
   return session;
 }
 
-// Export GET handler for Next.js App Router
+// Export GET handler for Next.js 15
 export const GET = handleAuth({
   login: handleLogin({
     authorizationParams: {

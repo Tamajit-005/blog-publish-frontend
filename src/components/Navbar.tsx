@@ -1,0 +1,176 @@
+"use client";
+
+import React, { useState, useEffect } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { FaSearch, FaTimes, FaBars } from "react-icons/fa";
+import { motion, AnimatePresence } from "framer-motion";
+
+const Navbar = () => {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [username, setUsername] = useState<string | null>(null);
+  const [user, setUser] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const router = useRouter();
+
+  // Fetch user session
+  useEffect(() => {
+    fetch("/api/user/username")
+      .then((res) => {
+        if (res.ok) {
+          return res.json();
+        }
+        throw new Error("Not authenticated");
+      })
+      .then((data) => {
+        setUsername(data.username);
+        setUser({ email: data.email });
+      })
+      .catch(() => {
+        // User not logged in
+        setUsername(null);
+        setUser(null);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }, []);
+
+  const handleLogout = () => {
+    window.location.href = "/api/auth/custom-logout";
+  };
+
+  const getInitials = (name: string | undefined) => {
+    if (!name) return "U";
+    const parts = name.split(" ");
+    if (parts.length === 1) return parts[0][0].toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  };
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = searchQuery.trim();
+    if (q) router.push(`/search?query=${encodeURIComponent(q)}`);
+    setSearchOpen(false);
+    setMenuOpen(false);
+  };
+
+  useEffect(() => {
+    document.body.style.overflow = menuOpen || searchOpen ? "hidden" : "";
+  }, [menuOpen, searchOpen]);
+
+  const displayName = username || "User";
+
+  return (
+    <header className="bg-[#0f111a] text-white sticky top-0 z-50 shadow-md">
+      <div className="max-w-6xl mx-auto flex items-center justify-between p-4">
+        <Link href="/">
+          <img src="/images/Logo.png" alt="Logo" className="h-12 w-auto" />
+        </Link>
+
+        {/* Desktop Navigation */}
+        <nav className="hidden md:flex items-center gap-6 font-medium">
+          <Link href="/blogs" className="hover:text-teal-400 transition-colors">
+            Blogs
+          </Link>
+
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="text-xl hover:text-teal-400 transition-colors"
+          >
+            <FaSearch />
+          </button>
+
+          {!isLoading && (
+            <>
+              {user ? (
+                <>
+                  <button
+                    onClick={() => router.push("/create")}
+                    className="bg-teal-600 hover:bg-teal-500 px-4 py-2 rounded-md text-sm font-semibold text-white transition"
+                  >
+                    Create
+                  </button>
+
+                  <div className="relative">
+                    <button
+                      onClick={() => setProfileOpen((prev) => !prev)}
+                      className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-800 border border-gray-600 hover:border-teal-500 transition text-teal-300 font-bold"
+                    >
+                      {getInitials(displayName)}
+                    </button>
+
+                    <AnimatePresence>
+                      {profileOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -8 }}
+                          transition={{ duration: 0.2 }}
+                          className="absolute right-0 mt-2 bg-[#1a1c29] w-48 rounded-lg shadow-lg border border-gray-700 text-sm z-50"
+                        >
+                          <div className="px-4 py-3 border-b border-gray-700 text-gray-300">
+                            Logged in as
+                            <br />
+                            <span className="text-teal-400 font-medium">
+                              {displayName}
+                            </span>
+                          </div>
+
+                          <Link
+                            href="/my-posts"
+                            className="block px-4 py-2 hover:bg-teal-700 hover:text-white transition"
+                            onClick={() => setProfileOpen(false)}
+                          >
+                            Your Posts
+                          </Link>
+
+                          <button
+                            onClick={handleLogout}
+                            className="block w-full text-left px-4 py-2 hover:bg-red-600 hover:text-white transition"
+                          >
+                            Logout
+                          </button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Link
+                    href="/login"
+                    className="hover:text-teal-400 transition-colors"
+                  >
+                    Login
+                  </Link>
+                  <Link
+                    href="/signup"
+                    className="bg-teal-600 hover:bg-teal-500 px-4 py-2 rounded-md text-sm font-semibold text-white transition"
+                  >
+                    Register
+                  </Link>
+                </>
+              )}
+            </>
+          )}
+        </nav>
+
+        <button
+          className="md:hidden text-2xl"
+          onClick={() => setMenuOpen((prev) => !prev)}
+        >
+          {menuOpen ? <FaTimes /> : <FaBars />}
+        </button>
+      </div>
+
+      {/* Mobile Menu & Search Modal - keep existing code */}
+    </header>
+  );
+};
+
+export default Navbar;

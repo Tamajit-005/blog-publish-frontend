@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({
           grant_type: "http://auth0.com/oauth/grant-type/password-realm",
           username: email,
-          password,
+          password: password,
           client_id: process.env.AUTH0_CLIENT_ID,
           client_secret: process.env.AUTH0_CLIENT_SECRET,
           realm: "Username-Password-Authentication",
@@ -37,13 +37,24 @@ export async function POST(req: NextRequest) {
     const tokenData = await tokenResponse.json();
 
     if (!tokenResponse.ok) {
-      return NextResponse.json(
-        { error: "Invalid email or password" },
-        { status: 401 }
-      );
+      console.error("Authentication failed:", tokenData);
+
+      let errorMessage = "Invalid email or password";
+
+      if (tokenData.error === "invalid_grant" || tokenData.error === "invalid_user_password") {
+        errorMessage = "Invalid email or password";
+      } else if (tokenData.error === "access_denied") {
+        errorMessage = "Account locked or disabled";
+      } else if (tokenData.error_description) {
+        errorMessage = tokenData.error_description;
+      }
+
+      return NextResponse.json({ error: errorMessage }, { status: 401 });
     }
 
-    // 🔍 Get user profile
+    console.log("Authentication successful");
+
+    // Step 2: Get user profile
     const userInfoResponse = await fetch(
       `${process.env.AUTH0_ISSUER_BASE_URL}/userinfo`,
       {
@@ -54,8 +65,10 @@ export async function POST(req: NextRequest) {
     );
 
     const userInfo = await userInfoResponse.json();
+    console.log("User profile retrieved:", userInfo.email);
 
-    const usernameFromAuth0 =
+    // Determine username
+    const authUsername =
       userInfo["https://palettepublisher.com/username"] ||
       userInfo.nickname ||
       userInfo.email.split("@")[0];
