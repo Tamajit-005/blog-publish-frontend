@@ -5,6 +5,15 @@ export interface IUser extends Document {
   username: string;
   email: string;
   role: "user" | "admin" | "superadmin";
+
+  // 🔐 Login tracking
+  lastLoginAt?: Date;
+  lastLoginIp?: string;
+
+  // 🚪 Logout tracking
+  lastLogoutAt?: Date;
+  lastLogoutIp?: string;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -34,6 +43,22 @@ const UserSchema = new mongoose.Schema<IUser>(
       type: String,
       enum: ["user", "admin", "superadmin"],
       default: "user",
+    },
+
+    // 🔐 Login tracking
+    lastLoginAt: {
+      type: Date,
+    },
+    lastLoginIp: {
+      type: String,
+    },
+
+    // 🚪 Logout tracking
+    lastLogoutAt: {
+      type: Date,
+    },
+    lastLogoutIp: {
+      type: String,
     },
   },
   { timestamps: true }
