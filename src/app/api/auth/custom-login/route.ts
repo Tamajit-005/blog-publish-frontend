@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
         $setOnInsert: {
           auth0Id: userInfo.sub,
           email: userInfo.email,
-          username: usernameFromAuth0,
+          username: authUsername,
           role: "user",
         },
         $set: {
