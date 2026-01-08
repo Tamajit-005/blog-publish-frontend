@@ -122,7 +122,7 @@ const Navbar = () => {
                           </div>
 
                           <Link
-                            href="/my-posts"
+                            href="/blogs"
                             className="block px-4 py-2 hover:bg-teal-700 hover:text-white transition"
                             onClick={() => setProfileOpen(false)}
                           >
