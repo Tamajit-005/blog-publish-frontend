@@ -130,14 +130,12 @@ export default function LoginPage() {
                 </button>
               </div>
               <div className="flex justify-end mt-2">
-                <a
-                  href="https://palettepublisher.us.auth0.com/dbconnections/change_password"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-teal-400 hover:text-teal-300 transition-colors"
+              <Link
+               href={`/forgot-password?returnTo=${encodeURIComponent(returnTo)}`}
+               className="text-xs text-teal-400 hover:text-teal-300 transition-colors"
                 >
-                  Forgot password?
-                </a>
+                Forgot password?
+              </Link>
               </div>
             </div>
 

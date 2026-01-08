@@ -16,9 +16,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log("Attempting login for:", email);
-
-    // Step 1: Authenticate with Auth0
+    // 🔐 Authenticate with Auth0
     const tokenResponse = await fetch(
       `${process.env.AUTH0_ISSUER_BASE_URL}/oauth/token`,
       {
@@ -75,45 +73,47 @@ export async function POST(req: NextRequest) {
       userInfo.nickname ||
       userInfo.email.split("@")[0];
 
-    console.log("Username from Auth0:", authUsername);
+    // 🌐 Capture IP
+    const ipAddress =
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      req.headers.get("x-real-ip") ||
+      "unknown";
 
-    // Step 3: Sync with MongoDB and get username
-    let mongoUsername = authUsername;
-    try {
-      await connectToDatabase();
+    // 🗄️ Sync MongoDB + UPDATE LOGIN TIME
+    await connectToDatabase();
 
-      let mongoUser = await User.findOne({ auth0Id: userInfo.sub });
-
-      if (!mongoUser) {
-        mongoUser = await User.create({
+    const mongoUser = await User.findOneAndUpdate(
+      { auth0Id: userInfo.sub },
+      {
+        $setOnInsert: {
           auth0Id: userInfo.sub,
           email: userInfo.email,
           username: authUsername,
           role: "user",
-        });
-        console.log("MongoDB user created:", mongoUser.username);
-        mongoUsername = mongoUser.username;
-      } else {
-        console.log("MongoDB user exists:", mongoUser.username);
-        mongoUsername = mongoUser.username;
-      }
-    } catch (mongoError) {
-      console.error("MongoDB sync failed:", mongoError);
-    }
+        },
+        $set: {
+          lastLoginAt: new Date(),
+          lastLoginIp: ipAddress,
+        },
+      },
+      { upsert: true, new: true }
+    );
 
-    // Step 4: Create iron-session
+    // 🍪 Create session
     const response = NextResponse.json({
       success: true,
       user: {
         sub: userInfo.sub,
         email: userInfo.email,
-        username: mongoUsername,
+        username: mongoUser.username,
       },
     });
 
-    // Get cookies and create session
     const cookieStore = await cookies();
-    const session = await getIronSession<SessionData>(cookieStore, sessionOptions);
+    const session = await getIronSession<SessionData>(
+      cookieStore,
+      sessionOptions
+    );
 
     session.user = {
       sub: userInfo.sub,
@@ -121,18 +121,17 @@ export async function POST(req: NextRequest) {
       name: userInfo.name,
       nickname: userInfo.nickname,
       picture: userInfo.picture,
-      username: mongoUsername, 
+      username: mongoUser.username,
     };
+
     session.accessToken = tokenData.access_token;
     session.idToken = tokenData.id_token;
     session.isLoggedIn = true;
 
     await session.save();
 
-    console.log("Session created for:", mongoUsername);
-
     return response;
-  } catch (error: any) {
+  } catch (error) {
     console.error("Login error:", error);
     return NextResponse.json(
       { error: "Login failed. Please try again." },
