@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkAdminAuth } from "@/lib/adminAuth";
 import dbConnect from "@/lib/mongoose";
 import Blog from "@/models/Blog";
+import crypto from "crypto";
 
 export async function POST(req: NextRequest) {
   try {
@@ -39,88 +40,93 @@ export async function POST(req: NextRequest) {
     }
 
     const strapiUrl = process.env.NEXT_PUBLIC_STRAPI_URL;
-    console.log("🔄 Publishing to Strapi:", blog.title);
-    console.log("🔵 Blog slug:", blog.slug);
+    if (!strapiUrl) {
+      return NextResponse.json(
+        { error: "Strapi URL not configured" },
+        { status: 500 }
+      );
+    }
 
-    // Step 1: Find or create Writer (User) in Strapi
-    console.log("🔵 Step 1: Finding/creating writer in Strapi...");
+    console.log("🔄 Publishing to Strapi:", blog.title);
+
+    /* ──────────────────────────────────────────────
+       STEP 1: FIND OR CREATE WRITER IN STRAPI
+    ────────────────────────────────────────────── */
 
     let writerId: number | null = null;
 
     const findWriterResponse = await fetch(
-      `${strapiUrl}/api/users?filters[username][$eq]=${blog.author.username}`,
-      {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      }
+      `${strapiUrl}/api/users?filters[username][$eq]=${encodeURIComponent(
+        blog.author.username
+      )}`,
+      { headers: { "Content-Type": "application/json" } }
     );
 
     if (findWriterResponse.ok) {
-      const existingWriters = await findWriterResponse.json();
-      if (existingWriters.length > 0) {
-        writerId = existingWriters[0].id;
-        console.log("✅ Found existing writer in Strapi:", writerId);
+      const writers = await findWriterResponse.json();
+      if (Array.isArray(writers) && writers.length > 0) {
+        writerId = writers[0].id;
       }
     }
 
     if (!writerId) {
-      console.log("🔵 Creating new writer in Strapi...");
       const createWriterResponse = await fetch(`${strapiUrl}/api/users`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           username: blog.author.username,
           email: blog.author.email,
-          password: Math.random().toString(36).slice(-8),
+          password: crypto.randomBytes(8).toString("hex").slice(0, 8),
         }),
       });
 
-      if (createWriterResponse.ok) {
-        const writerData = await createWriterResponse.json();
-        writerId = writerData.id || writerData.data?.id;
-        console.log("✅ Created new writer in Strapi:", writerId);
-      } else {
-        const errorText = await createWriterResponse.text();
-        console.error("❌ Failed to create writer:", errorText);
-      }
-    }
-
-    // Step 2: Get Category ID from Strapi
-    console.log("🔵 Step 2: Fetching category from Strapi...");
-
-    let categoryId: number | null = null;
-
-    const findCategoryResponse = await fetch(
-      `${strapiUrl}/api/categories?filters[slug][$eq]=${blog.category.toLowerCase()}`,
-      {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      }
-    );
-
-    if (findCategoryResponse.ok) {
-      const categories = await findCategoryResponse.json();
-      if (categories.data && categories.data.length > 0) {
-        categoryId = categories.data[0].id;
-        console.log("✅ Found category in Strapi:", categoryId);
-      } else {
-        console.warn(
-          "⚠️  Category not found in Strapi, proceeding without category"
+      if (!createWriterResponse.ok) {
+        const err = await createWriterResponse.text();
+        return NextResponse.json(
+          { error: `Failed to create writer: ${err}` },
+          { status: 500 }
         );
       }
+
+      const writerData = await createWriterResponse.json();
+      writerId = writerData.id ?? writerData.data?.id ?? null;
     }
 
-    // Step 3: Publish Blog to Strapi
-    console.log("🔵 Step 3: Publishing blog to Strapi...");
+    /* ──────────────────────────────────────────────
+       STEP 2: FETCH CATEGORY (USE FIRST CATEGORY)
+    ────────────────────────────────────────────── */
+
+    let categoryId: number | null = null;
+    const primaryCategory = blog.categories?.[0];
+
+    if (primaryCategory) {
+      const findCategoryResponse = await fetch(
+        `${strapiUrl}/api/categories?filters[slug][$eq]=${encodeURIComponent(
+          primaryCategory.toLowerCase()
+        )}`,
+        { headers: { "Content-Type": "application/json" } }
+      );
+
+      if (findCategoryResponse.ok) {
+        const categories = await findCategoryResponse.json();
+        if (categories.data?.length > 0) {
+          categoryId = categories.data[0].id;
+        }
+      }
+    }
+
+    /* ──────────────────────────────────────────────
+       STEP 3: PUBLISH BLOG TO STRAPI
+    ────────────────────────────────────────────── */
 
     const strapiPayload: any = {
       data: {
         title: blog.title,
         slug: blog.slug,
-        description: blog.description || blog.content.substring(0, 200),
+        description:
+          blog.description || blog.content.substring(0, 200),
         content: blog.content,
         cover: blog.coverImage || null,
-        heading: blog.heading || "H1",
       },
     };
 
@@ -132,42 +138,34 @@ export async function POST(req: NextRequest) {
       strapiPayload.data.writer = writerId;
     }
 
-    console.log("📤 Payload:", JSON.stringify(strapiPayload, null, 2));
-
     const strapiResponse = await fetch(`${strapiUrl}/api/blogs`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(strapiPayload),
     });
 
-    const responseText = await strapiResponse.text();
-    console.log("📥 Strapi status:", strapiResponse.status);
-    console.log("📥 Strapi response:", responseText);
-
     if (!strapiResponse.ok) {
-      console.error("❌ Strapi error:", responseText);
+      const err = await strapiResponse.text();
       return NextResponse.json(
-        { error: `Strapi error: ${responseText}` },
+        { error: `Strapi publish failed: ${err}` },
         { status: 500 }
       );
     }
 
-    const strapiData = JSON.parse(responseText);
+    const strapiData = await strapiResponse.json();
     const strapiId = strapiData.data?.id;
 
-    console.log("✅ Published to Strapi with ID:", strapiId);
+    /* ──────────────────────────────────────────────
+       STEP 4: UPDATE MONGODB
+    ────────────────────────────────────────────── */
 
-    // Step 4: Update MongoDB
     blog.status = "published";
     blog.strapiId = strapiId;
-    blog.strapiWriterId = writerId || undefined;
+    blog.strapiWriterId = writerId ?? undefined;
     blog.publishedAt = new Date();
     blog.adminNotes = adminNotes || "";
-    await blog.save();
 
-    console.log(`✅ Blog approved: ${blog.title}`);
+    await blog.save();
 
     return NextResponse.json({
       message: "Blog approved and published to Strapi",
@@ -177,7 +175,6 @@ export async function POST(req: NextRequest) {
         slug: blog.slug,
         status: blog.status,
         strapiId: blog.strapiId,
-        strapiWriterId: blog.strapiWriterId,
       },
     });
   } catch (error: any) {

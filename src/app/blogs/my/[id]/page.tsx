@@ -24,6 +24,7 @@ interface Blog {
     email: string;
   };
   status: string;
+  adminNotes?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -137,6 +138,19 @@ export default function MyBlogDetailPage() {
             {blog.status.toUpperCase()}
           </span>
         </motion.div>
+
+        {/* ADMIN NOTES FOR REJECTION */}
+        {blog.status === "rejected" && blog.adminNotes && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="mt-4 bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-lg text-sm text-center"
+          >
+            <span className="font-semibold">Rejection reason:</span>{" "}
+            {blog.adminNotes}
+          </motion.div>
+        )}
 
         {/* CATEGORIES */}
         {blog.categories && blog.categories.length > 0 && (

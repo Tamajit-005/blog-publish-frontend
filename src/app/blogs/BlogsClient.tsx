@@ -16,6 +16,7 @@ interface Blog {
   categories: string[];
   coverImage?: string;
   status: "draft" | "pending" | "approved" | "rejected" | "published";
+  adminNotes?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -208,7 +209,10 @@ export default function BlogsClient() {
                     "Click to view published blog"}
                   {blog.status === "pending" &&
                     "Awaiting Review - Click to preview"}
-                  {blog.status === "rejected" && "Rejected - Click to view"}
+                  {blog.status === "rejected" &&
+                    (blog.adminNotes
+                      ? "Rejected - Click to view reason"
+                      : "Rejected")}
                   {blog.status === "approved" && "Approved - Publishing Soon"}
                 </div>
               </div>
