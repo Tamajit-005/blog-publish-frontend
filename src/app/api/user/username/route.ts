@@ -7,25 +7,20 @@ import User from "@/models/User";
 
 export async function GET() {
   try {
-    // Get session from iron-session
     const cookieStore = await cookies();
-    const session = await getIronSession<SessionData>(cookieStore, sessionOptions);
+    const session = await getIronSession<SessionData>(
+      cookieStore,
+      sessionOptions
+    );
 
     if (!session?.user?.sub) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Return username from session (already from MongoDB)
-    if (session.user.username) {
-      return NextResponse.json({
-        username: session.user.username,
-        email: session.user.email,
-      });
-    }
-
-    // Fallback: fetch from MongoDB if not in session
+    // 🔥 ALWAYS read from MongoDB to get latest role
     await dbConnect();
-    const user = await User.findOne({ auth0Id: session.user.sub });
+
+    const user = await User.findOne({ auth0Id: session.user.sub }).lean();
 
     if (!user) {
       return NextResponse.json(
@@ -34,14 +29,22 @@ export async function GET() {
       );
     }
 
+    // 🔄 Sync session with DB (important after promotion)
+    session.user.username = user.username;
+    session.user.email = user.email;
+    session.user.role = user.role;
+    await session.save();
+
+    // ✅ Return role to frontend
     return NextResponse.json({
       username: user.username,
       email: user.email,
+      role: user.role,
     });
   } catch (error) {
-    console.error("Error fetching username:", error);
+    console.error("Error fetching user info:", error);
     return NextResponse.json(
-      { error: "Failed to fetch username" },
+      { error: "Failed to fetch user info" },
       { status: 500 }
     );
   }

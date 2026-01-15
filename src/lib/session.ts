@@ -4,11 +4,16 @@ export interface SessionData {
   user?: {
     sub: string;
     email: string;
+    username: string;
+
+    // 🔥 ADD THIS (IMPORTANT)
+    role?: "user" | "admin" | "superadmin";
+
     name?: string;
     nickname?: string;
     picture?: string;
-    username: string;
   };
+
   accessToken?: string;
   idToken?: string;
   isLoggedIn: boolean;

@@ -7,15 +7,16 @@ import { motion } from "framer-motion";
 import { Eye, EyeOff } from "lucide-react";
 
 export default function LoginPage() {
+  // 🔁 CHANGE 1: email → identifier
   const [formData, setFormData] = useState({
-    email: "",
+    identifier: "",
     password: "",
   });
+
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // Read ?returnTo=/some/path from URL, default to "/"
   const searchParams = useSearchParams();
   const returnTo = searchParams.get("returnTo") || "/";
 
@@ -25,10 +26,11 @@ export default function LoginPage() {
     setError("");
 
     try {
-      // Step 1: Authenticate with Auth0
       const res = await fetch("/api/auth/custom-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+
+        // 🔁 CHANGE 2: send identifier instead of email
         body: JSON.stringify(formData),
       });
 
@@ -40,11 +42,9 @@ export default function LoginPage() {
 
       console.log("✅ Login successful:", data.user?.email);
 
-      // Step 2: Store session in localStorage (dev)
       localStorage.setItem("custom_user", JSON.stringify(data.user));
       localStorage.setItem("custom_access_token", data.accessToken);
 
-      // Step 3: Redirect back to the page that requested login
       window.location.href = returnTo;
     } catch (err: any) {
       setError(err.message || "Login failed");
@@ -78,22 +78,24 @@ export default function LoginPage() {
           className="bg-slate-900 rounded-lg p-8 shadow-2xl border border-slate-800"
         >
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Email Field */}
+            {/* Identifier Field */}
             <div>
               <label className="block text-gray-300 mb-2 font-medium text-sm">
-                Email Address
+                Email or Username
               </label>
+
+              {/* 🔁 CHANGE 3: type="text" + identifier */}
               <input
-                type="email"
-                value={formData.email}
+                type="text"
+                value={formData.identifier}
                 onChange={(e) =>
-                  setFormData({ ...formData, email: e.target.value })
+                  setFormData({ ...formData, identifier: e.target.value })
                 }
                 required
                 disabled={loading}
-                autoComplete="email"
+                autoComplete="username"
                 className="w-full p-3 rounded-md bg-slate-800 text-gray-100 border border-slate-700 focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 focus:outline-none transition disabled:opacity-50 disabled:cursor-not-allowed"
-                placeholder="your@email.com"
+                placeholder="Email or username"
               />
             </div>
 
@@ -129,13 +131,16 @@ export default function LoginPage() {
                   )}
                 </button>
               </div>
+
               <div className="flex justify-end mt-2">
-              <Link
-               href={`/forgot-password?returnTo=${encodeURIComponent(returnTo)}`}
-               className="text-xs text-teal-400 hover:text-teal-300 transition-colors"
+                <Link
+                  href={`/forgot-password?returnTo=${encodeURIComponent(
+                    returnTo
+                  )}`}
+                  className="text-xs text-teal-400 hover:text-teal-300 transition-colors"
                 >
-                Forgot password?
-              </Link>
+                  Forgot password?
+                </Link>
               </div>
             </div>
 
@@ -157,33 +162,7 @@ export default function LoginPage() {
               disabled={loading}
               className="w-full bg-teal-500 hover:bg-teal-400 text-slate-900 font-semibold py-3 rounded-lg shadow-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-teal-500"
             >
-              {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg
-                    className="animate-spin h-5 w-5"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    ></circle>
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                  Logging in...
-                </span>
-              ) : (
-                "Log In"
-              )}
+              {loading ? "Logging in..." : "Log In"}
             </button>
           </form>
 
@@ -199,7 +178,7 @@ export default function LoginPage() {
           </p>
         </motion.div>
 
-        {/* Footer Note */}
+        {/* Footer */}
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

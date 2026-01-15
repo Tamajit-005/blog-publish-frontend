@@ -7,16 +7,17 @@ import { cookies } from "next/headers";
 
 export async function POST(req: NextRequest) {
   try {
-    const { email, password } = await req.json();
+    // 🔁 CHANGE 1: rename email → identifier
+    const { identifier, password } = await req.json();
 
-    if (!email || !password) {
+    if (!identifier || !password) {
       return NextResponse.json(
-        { error: "Email and password are required" },
+        { error: "Email/Username and password are required" },
         { status: 400 }
       );
     }
 
-    // 🔐 Authenticate with Auth0
+    // 🔐 Authenticate with Auth0 (email OR username)
     const tokenResponse = await fetch(
       `${process.env.AUTH0_ISSUER_BASE_URL}/oauth/token`,
       {
@@ -24,8 +25,11 @@ export async function POST(req: NextRequest) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           grant_type: "http://auth0.com/oauth/grant-type/password-realm",
-          username: email,
-          password: password,
+
+          // 🔁 CHANGE 2: send identifier directly
+          username: identifier,
+
+          password,
           client_id: process.env.AUTH0_CLIENT_ID,
           client_secret: process.env.AUTH0_CLIENT_SECRET,
           realm: "Username-Password-Authentication",
@@ -39,10 +43,13 @@ export async function POST(req: NextRequest) {
     if (!tokenResponse.ok) {
       console.error("Authentication failed:", tokenData);
 
-      let errorMessage = "Invalid email or password";
+      let errorMessage = "Invalid email/username or password";
 
-      if (tokenData.error === "invalid_grant" || tokenData.error === "invalid_user_password") {
-        errorMessage = "Invalid email or password";
+      if (
+        tokenData.error === "invalid_grant" ||
+        tokenData.error === "invalid_user_password"
+      ) {
+        errorMessage = "Invalid email/username or password";
       } else if (tokenData.error === "access_denied") {
         errorMessage = "Account locked or disabled";
       } else if (tokenData.error_description) {
@@ -52,9 +59,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: errorMessage }, { status: 401 });
     }
 
-    console.log("Authentication successful");
-
-    // Step 2: Get user profile
+    // 🔍 Get user profile
     const userInfoResponse = await fetch(
       `${process.env.AUTH0_ISSUER_BASE_URL}/userinfo`,
       {
@@ -65,13 +70,12 @@ export async function POST(req: NextRequest) {
     );
 
     const userInfo = await userInfoResponse.json();
-    console.log("User profile retrieved:", userInfo.email);
 
-    // Determine username
+    // 🔑 Determine username
     const authUsername =
       userInfo["https://palettepublisher.com/username"] ||
       userInfo.nickname ||
-      userInfo.email.split("@")[0];
+      userInfo.email?.split("@")[0];
 
     // 🌐 Capture IP
     const ipAddress =
@@ -79,7 +83,7 @@ export async function POST(req: NextRequest) {
       req.headers.get("x-real-ip") ||
       "unknown";
 
-    // 🗄️ Sync MongoDB + UPDATE LOGIN TIME
+    // 🗄️ Sync MongoDB + update login metadata
     await connectToDatabase();
 
     const mongoUser = await User.findOneAndUpdate(
