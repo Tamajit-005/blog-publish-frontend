@@ -2,185 +2,326 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkAdminAuth } from "@/lib/adminAuth";
 import dbConnect from "@/lib/mongoose";
 import Blog from "@/models/Blog";
+import User from "@/models/User";
 import crypto from "crypto";
+
+const STRAPI_URL = process.env.STRAPI_URL!;
+const MAX_CONTENT_CHARS = 100_000;
+
+/* ───────────────── HELPERS ───────────────── */
+
+/**
+ * Login to Strapi if credentials already exist in MongoDB.
+ * Otherwise register once, store password in MongoDB, and reuse forever.
+ */
+async function loginOrRegister(
+  user: any
+): Promise<{ jwt: string }> {
+  let password = user.strapi?.password;
+
+  // Generate password only once
+  if (!password) {
+    password = crypto.randomBytes(24).toString("hex");
+  }
+
+  // Try login first
+  let res = await fetch(`${STRAPI_URL}/api/auth/local`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      identifier: user.email,
+      password,
+    }),
+  });
+
+  if (res.ok) {
+    return res.json();
+  }
+
+  // If password already existed but login failed → hard error
+  if (user.strapi?.password) {
+    throw new Error("Stored Strapi credentials are invalid");
+  }
+
+  // Register new Strapi user
+  res = await fetch(`${STRAPI_URL}/api/auth/local/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email: user.email,
+      username: user.username,
+      password,
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Strapi register failed: ${await res.text()}`);
+  }
+
+  const data = await res.json();
+
+  // Persist Strapi credentials in MongoDB
+  user.strapi = {
+    userId: data.user?.id,
+    password,
+  };
+
+  await user.save();
+
+  return data;
+}
+
+/* Safety net for legacy base64 and stray HTML data src attributes */
+function sanitizeHtmlDataSrc(content: string) {
+  return content.replace(/src=["']data:[^"']+["']/g, "");
+}
+
+/* Remove any stray markdown images that still point to data: URIs */
+function removeStrayMarkdownBase64(content: string) {
+  return content.replace(/!\[([^\]]*)\]\((data:[^)]+)\)/g, "![image removed]");
+}
+
+async function resolveCategoryIds(slugs: string[], jwt: string) {
+  const ids: number[] = [];
+
+  for (const slug of slugs) {
+    const res = await fetch(
+      `${STRAPI_URL}/api/categories?filters[slug][$eq]=${encodeURIComponent(
+        slug
+      )}`,
+      { headers: { Authorization: `Bearer ${jwt}` } }
+    );
+
+    if (!res.ok) continue;
+
+    const json = await res.json();
+    if (json.data?.[0]?.id) ids.push(json.data[0].id);
+  }
+
+  return ids;
+}
+
+/* Extract filename from base64 data URL if present */
+function filenameFromBase64(base64?: string, fallback = "image") {
+  if (!base64) return `${fallback}.png`;
+
+  const nameMatch = base64.match(/name=([^;]+);base64,/);
+  if (nameMatch?.[1]) {
+    try {
+      return decodeURIComponent(nameMatch[1]);
+    } catch {
+      return nameMatch[1];
+    }
+  }
+
+  const mimeMatch = base64.match(/^data:(image\/[^;]+);base64,/);
+  const mime = mimeMatch?.[1] || "image/png";
+
+  const extMap: Record<string, string> = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/webp": "webp",
+    "image/gif": "gif",
+    "image/svg+xml": "svg",
+  };
+
+  const ext = extMap[mime] || "png";
+  return `${fallback}.${ext}`;
+}
+
+/* Resolve Strapi file URL safely */
+function extractFileUrl(fileObj: any): string | null {
+  if (!fileObj) return null;
+
+  let url: any = null;
+
+  if (typeof fileObj === "string") url = fileObj;
+  if (!url && fileObj.url) url = fileObj.url;
+  if (!url && fileObj.attributes?.url) url = fileObj.attributes.url;
+  if (!url && fileObj.data?.attributes?.url)
+    url = fileObj.data.attributes.url;
+
+  if (!url) return null;
+
+  if (!/^https?:\/\//i.test(url)) {
+    return STRAPI_URL.replace(/\/$/, "") + url;
+  }
+
+  return url;
+}
+
+/* ───── Upload COVER image ───── */
+async function uploadCover(
+  base64?: string,
+  filename?: string,
+  jwt?: string
+) {
+  if (!base64 || !filename || !jwt) return null;
+
+  const res = await fetch(base64);
+  if (!res.ok) throw new Error("Failed to decode base64 cover image");
+
+  const blob = await res.blob();
+  const form = new FormData();
+  form.append("files", blob, filename);
+
+  const uploadRes = await fetch(`${STRAPI_URL}/api/upload`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${jwt}` },
+    body: form,
+  });
+
+  if (!uploadRes.ok) {
+    throw new Error(`Cover upload failed: ${await uploadRes.text()}`);
+  }
+
+  const uploaded = await uploadRes.json();
+  const fileObj = Array.isArray(uploaded) ? uploaded[0] : uploaded;
+  return fileObj?.id ?? null;
+}
+
+/* ───── Upload INLINE image ───── */
+async function uploadInlineImage(
+  base64: string,
+  filename: string,
+  jwt: string
+) {
+  const res = await fetch(base64);
+  if (!res.ok) throw new Error("Failed to decode inline image");
+
+  const blob = await res.blob();
+  const form = new FormData();
+  form.append("files", blob, filename);
+
+  const uploadRes = await fetch(`${STRAPI_URL}/api/upload`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${jwt}` },
+    body: form,
+  });
+
+  if (!uploadRes.ok) {
+    throw new Error(`Inline image upload failed: ${await uploadRes.text()}`);
+  }
+
+  const uploaded = await uploadRes.json();
+  return Array.isArray(uploaded) ? uploaded[0] : uploaded;
+}
+
+/* ───────────────── ROUTE ───────────────── */
 
 export async function POST(req: NextRequest) {
   try {
     const auth = await checkAdminAuth();
-
-    if (!auth.authorized || !auth.user) {
-      return NextResponse.json(
-        { error: auth.error || "Unauthorized" },
-        { status: auth.status || 403 }
-      );
+    if (!auth.authorized) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
-    const { blogId, adminNotes } = await req.json();
-
+    const { blogId } = await req.json();
     if (!blogId) {
-      return NextResponse.json(
-        { error: "Blog ID is required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Blog ID required" }, { status: 400 });
     }
 
     await dbConnect();
 
     const blog = await Blog.findById(blogId);
-
-    if (!blog) {
-      return NextResponse.json({ error: "Blog not found" }, { status: 404 });
+    if (!blog || blog.status !== "pending") {
+      return NextResponse.json({ error: "Invalid blog" }, { status: 400 });
     }
 
-    if (blog.status !== "pending") {
-      return NextResponse.json(
-        { error: "Only pending blogs can be approved" },
-        { status: 400 }
-      );
-    }
-
-    const strapiUrl = process.env.NEXT_PUBLIC_STRAPI_URL;
-    if (!strapiUrl) {
-      return NextResponse.json(
-        { error: "Strapi URL not configured" },
-        { status: 500 }
-      );
-    }
-
-    console.log("🔄 Publishing to Strapi:", blog.title);
-
-    /* ──────────────────────────────────────────────
-       STEP 1: FIND OR CREATE WRITER IN STRAPI
-    ────────────────────────────────────────────── */
-
-    let writerId: number | null = null;
-
-    const findWriterResponse = await fetch(
-      `${strapiUrl}/api/users?filters[username][$eq]=${encodeURIComponent(
-        blog.author.username
-      )}`,
-      { headers: { "Content-Type": "application/json" } }
+    const user = await User.findOne({ email: blog.author.email }).select(
+      "+strapi.password"
     );
 
-    if (findWriterResponse.ok) {
-      const writers = await findWriterResponse.json();
-      if (Array.isArray(writers) && writers.length > 0) {
-        writerId = writers[0].id;
-      }
+    if (!user) {
+      return NextResponse.json({ error: "Author not found" }, { status: 404 });
     }
 
-    if (!writerId) {
-      const createWriterResponse = await fetch(`${strapiUrl}/api/users`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username: blog.author.username,
-          email: blog.author.email,
-          password: crypto.randomBytes(8).toString("hex").slice(0, 8),
-        }),
-      });
+    /* STEP 1: LOGIN / REGISTER STRAPI USER */
+    const { jwt } = await loginOrRegister(user);
 
-      if (!createWriterResponse.ok) {
-        const err = await createWriterResponse.text();
-        return NextResponse.json(
-          { error: `Failed to create writer: ${err}` },
-          { status: 500 }
-        );
-      }
+    /* STEP 2: CONTENT + INLINE IMAGES */
+    let content = blog.content || "";
 
-      const writerData = await createWriterResponse.json();
-      writerId = writerData.id ?? writerData.data?.id ?? null;
-    }
+    content = sanitizeHtmlDataSrc(content);
 
-    /* ──────────────────────────────────────────────
-       STEP 2: FETCH CATEGORY (USE FIRST CATEGORY)
-    ────────────────────────────────────────────── */
+    if (Array.isArray(blog.inlineImages)) {
+      for (const img of blog.inlineImages) {
+        if (!img?.base64) continue;
 
-    let categoryId: number | null = null;
-    const primaryCategory = blog.categories?.[0];
+        const filename = filenameFromBase64(img.base64, img.id);
 
-    if (primaryCategory) {
-      const findCategoryResponse = await fetch(
-        `${strapiUrl}/api/categories?filters[slug][$eq]=${encodeURIComponent(
-          primaryCategory.toLowerCase()
-        )}`,
-        { headers: { "Content-Type": "application/json" } }
-      );
-
-      if (findCategoryResponse.ok) {
-        const categories = await findCategoryResponse.json();
-        if (categories.data?.length > 0) {
-          categoryId = categories.data[0].id;
+        try {
+          const uploaded = await uploadInlineImage(
+            img.base64,
+            filename,
+            jwt
+          );
+          const url = extractFileUrl(uploaded);
+          if (url) {
+            content = content.split(img.placeholder).join(`![image](${url})`);
+          }
+        } catch (e) {
+          console.error("Inline image upload failed:", e);
         }
       }
     }
 
-    /* ──────────────────────────────────────────────
-       STEP 3: PUBLISH BLOG TO STRAPI
-    ────────────────────────────────────────────── */
+    content = removeStrayMarkdownBase64(content);
 
-    const strapiPayload: any = {
-      data: {
-        title: blog.title,
-        slug: blog.slug,
-        description:
-          blog.description || blog.content.substring(0, 200),
-        content: blog.content,
-        cover: blog.coverImage || null,
-      },
-    };
-
-    if (categoryId) {
-      strapiPayload.data.category = categoryId;
+    if (content.length > MAX_CONTENT_CHARS) {
+      content = content.slice(0, MAX_CONTENT_CHARS);
     }
 
-    if (writerId) {
-      strapiPayload.data.writer = writerId;
-    }
+    /* STEP 3: RELATIONS + COVER */
+    const categoryIds = await resolveCategoryIds(blog.categories || [], jwt);
 
-    const strapiResponse = await fetch(`${strapiUrl}/api/blogs`, {
+    const coverId = await uploadCover(
+      blog.coverImage,
+      blog.coverImageName,
+      jwt
+    );
+
+    /* STEP 4: CREATE BLOG IN STRAPI */
+    const res = await fetch(`${STRAPI_URL}/api/blogs`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(strapiPayload),
+      headers: {
+        Authorization: `Bearer ${jwt}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        data: {
+          title: blog.title,
+          slug: blog.slug,
+          description: blog.description || content.slice(0, 160),
+          content,
+          category: categoryIds,
+          cover: coverId,
+          publishedAt: new Date().toISOString(),
+        },
+      }),
     });
 
-    if (!strapiResponse.ok) {
-      const err = await strapiResponse.text();
-      return NextResponse.json(
-        { error: `Strapi publish failed: ${err}` },
-        { status: 500 }
-      );
+    if (!res.ok) {
+      throw new Error(`Blog create failed: ${await res.text()}`);
     }
 
-    const strapiData = await strapiResponse.json();
-    const strapiId = strapiData.data?.id;
+    const created = await res.json();
 
-    /* ──────────────────────────────────────────────
-       STEP 4: UPDATE MONGODB
-    ────────────────────────────────────────────── */
-
+    /* STEP 5: UPDATE MONGO */
     blog.status = "published";
-    blog.strapiId = strapiId;
-    blog.strapiWriterId = writerId ?? undefined;
+    blog.strapiId = created.data.id;
     blog.publishedAt = new Date();
-    blog.adminNotes = adminNotes || "";
-
     await blog.save();
 
     return NextResponse.json({
-      message: "Blog approved and published to Strapi",
-      blog: {
-        id: blog._id,
-        title: blog.title,
-        slug: blog.slug,
-        status: blog.status,
-        strapiId: blog.strapiId,
-      },
+      success: true,
+      strapiId: blog.strapiId,
     });
-  } catch (error: any) {
-    console.error("❌ Approval error:", error);
+  } catch (err: any) {
+    console.error("❌ Approval error:", err);
     return NextResponse.json(
-      { error: `Failed to approve blog: ${error.message}` },
+      { error: err.message || "Approval failed" },
       { status: 500 }
     );
   }

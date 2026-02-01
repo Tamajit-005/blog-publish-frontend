@@ -3,6 +3,75 @@ import { checkUserAuth } from "@/lib/adminAuth";
 import dbConnect from "@/lib/mongoose";
 import Blog from "@/models/Blog";
 
+/* ───────────────── HELPERS ───────────────── */
+
+// Extract filename from base64 data URL if present
+function extractFilenameFromBase64(base64?: string): string | undefined {
+  if (!base64) return undefined;
+
+  // Must be a data URL
+  if (!base64.startsWith("data:image/")) return undefined;
+
+  // Only inspect the header part (before the first comma)
+  const commaIndex = base64.indexOf(",");
+  if (commaIndex === -1) return undefined;
+
+  // Hard limit header length to avoid ReDoS / large scans
+  const header = base64.slice(0, Math.min(commaIndex, 512));
+
+  // Look for name= inside the small, bounded header
+  const nameIndex = header.indexOf("name=");
+  if (nameIndex !== -1) {
+    const start = nameIndex + 5;
+    const end = header.indexOf(";", start);
+    if (end !== -1) {
+      try {
+        return decodeURIComponent(header.slice(start, end));
+      } catch {
+        return header.slice(start, end);
+      }
+    }
+  }
+
+  // Fallback based on MIME
+  if (header.startsWith("data:image/png")) return "cover.png";
+  if (header.startsWith("data:image/jpeg")) return "cover.jpg";
+  if (header.startsWith("data:image/webp")) return "cover.webp";
+
+  return "cover.jpg";
+}
+
+/* Basic server-side validation for inline images */
+function validateInlineImages(inlineImages: any): { ok: boolean; error?: string } {
+  if (inlineImages === undefined || inlineImages === null) return { ok: true };
+
+  if (!Array.isArray(inlineImages)) {
+    return { ok: false, error: "inlineImages must be an array" };
+  }
+
+  // limit count (defensive)
+  const MAX_INLINE = 20;
+  if (inlineImages.length > MAX_INLINE) {
+    return { ok: false, error: `Maximum ${MAX_INLINE} inline images allowed` };
+  }
+
+  for (const img of inlineImages) {
+    if (!img || typeof img !== "object") return { ok: false, error: "Each inline image must be an object" };
+    if (!img.id || typeof img.id !== "string") return { ok: false, error: "Each inline image must have an id string" };
+    if (!img.placeholder || typeof img.placeholder !== "string") return { ok: false, error: "Each inline image must have a placeholder string" };
+    if (!img.base64 || typeof img.base64 !== "string") return { ok: false, error: "Each inline image must have a base64 string" };
+    if (!img.base64.startsWith("data:image/")) return { ok: false, error: "Inline image base64 must be a data URI starting with data:image/" };
+    // Optionally, verify reasonable size by checking length (e.g. not larger than ~5MB)
+    const approxBytes = Math.ceil((img.base64.length - img.base64.indexOf(",") - 1) * 3 / 4);
+    const MAX_BYTES = 5 * 1024 * 1024;
+    if (approxBytes > MAX_BYTES) return { ok: false, error: "Inline image too large" };
+  }
+
+  return { ok: true };
+}
+
+/* ───────────────── ROUTE ───────────────── */
+
 export async function POST(req: NextRequest) {
   try {
     console.log("🔵 Blog creation started...");
@@ -21,18 +90,28 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     console.log("🔵 Request body received");
 
-    const { title, slug, content, description, coverImage, categories } = body;
+    const {
+      title,
+      slug,
+      content,
+      description,
+      coverImage,
+      categories,
+      inlineImages,
+    } = body;
 
-    // Validation
+    /* ───── Validation ───── */
+
     if (!title || !slug || !content || !description || !categories) {
-      console.log("❌ Missing required fields");
       return NextResponse.json(
-        { error: "Title, slug, content, description, and categories are required" },
+        {
+          error:
+            "Title, slug, content, description, and categories are required",
+        },
         { status: 400 }
       );
     }
 
-    // ✅ Validate categories
     if (!Array.isArray(categories) || categories.length === 0 || categories.length > 3) {
       return NextResponse.json(
         { error: "Please select 1-3 categories" },
@@ -61,11 +140,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log("🔵 Connecting to MongoDB...");
+    // Validate inline images (defensive)
+    const validation = validateInlineImages(inlineImages);
+    if (!validation.ok) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+
+    /* ───── DB ───── */
+
     await dbConnect();
     console.log("✅ Connected to MongoDB");
 
-    const slugExists = await Blog.findOne({ slug: slug.toLowerCase().trim() });
+    const normalizedSlug = slug.toLowerCase().trim();
+
+    const slugExists = await Blog.findOne({ slug: normalizedSlug });
     if (slugExists) {
       return NextResponse.json(
         { error: "This slug is already taken. Please choose another." },
@@ -73,29 +161,37 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log("🔵 Using slug:", slug);
+    /* ───── Cover filename extraction ───── */
 
-    // Create blog
+    const coverImageName = extractFilenameFromBase64(coverImage);
+
+    /* ───── Create blog ───── */
+
     const blog = await Blog.create({
       title: title.trim(),
-      slug: slug.toLowerCase().trim(),
+      slug: normalizedSlug,
       content: content.trim(),
       description: description.trim(),
+
       coverImage: coverImage?.trim() || undefined,
-      categories: categories,
+      coverImageName, // store original filename
+
+      categories,
+      inlineImages: Array.isArray(inlineImages) ? inlineImages : [], // INLINE IMAGES STORED SEPARATELY
+
       author: {
         auth0Id: auth.user.auth0Id,
         username: auth.user.username,
         email: auth.user.email,
       },
+
       status: "pending",
     });
 
-    console.log("✅ Blog created successfully!");
-    console.log("🔵 Blog categories:", blog.categories);
+    console.log("✅ Blog created successfully:", blog._id);
 
     return NextResponse.json({
-      message: "Blog submitted for review",
+      message: "Blog submitted for admin review",
       blog: {
         id: blog._id,
         title: blog.title,
@@ -106,7 +202,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: any) {
     console.error("❌ Blog creation error:", error);
-    console.error("❌ Error stack:", error.stack);
     return NextResponse.json(
       { error: "Failed to create blog" },
       { status: 500 }
