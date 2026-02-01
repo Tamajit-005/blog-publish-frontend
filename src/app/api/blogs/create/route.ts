@@ -9,20 +9,34 @@ import Blog from "@/models/Blog";
 function extractFilenameFromBase64(base64?: string): string | undefined {
   if (!base64) return undefined;
 
-  // Look for injected filename in data URL
-  const match = base64.match(/name=([^;]+);base64,/);
-  if (match?.[1]) {
-    try {
-      return decodeURIComponent(match[1]);
-    } catch {
-      return match[1];
+  // Must be a data URL
+  if (!base64.startsWith("data:image/")) return undefined;
+
+  // Only inspect the header part (before the first comma)
+  const commaIndex = base64.indexOf(",");
+  if (commaIndex === -1) return undefined;
+
+  // Hard limit header length to avoid ReDoS / large scans
+  const header = base64.slice(0, Math.min(commaIndex, 512));
+
+  // Look for name= inside the small, bounded header
+  const nameIndex = header.indexOf("name=");
+  if (nameIndex !== -1) {
+    const start = nameIndex + 5;
+    const end = header.indexOf(";", start);
+    if (end !== -1) {
+      try {
+        return decodeURIComponent(header.slice(start, end));
+      } catch {
+        return header.slice(start, end);
+      }
     }
   }
 
   // Fallback based on MIME
-  if (base64.startsWith("data:image/png")) return "cover.png";
-  if (base64.startsWith("data:image/jpeg")) return "cover.jpg";
-  if (base64.startsWith("data:image/webp")) return "cover.webp";
+  if (header.startsWith("data:image/png")) return "cover.png";
+  if (header.startsWith("data:image/jpeg")) return "cover.jpg";
+  if (header.startsWith("data:image/webp")) return "cover.webp";
 
   return "cover.jpg";
 }
