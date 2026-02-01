@@ -10,7 +10,7 @@ import { motion } from "framer-motion";
 function insertTextAtCursor(
   el: HTMLTextAreaElement,
   text: string,
-  cursorOffset = 0
+  cursorOffset = 0,
 ) {
   const start = el.selectionStart ?? el.value.length;
   const end = el.selectionEnd ?? el.value.length;
@@ -113,7 +113,20 @@ export default function CreateBlogPage() {
   }, []);
 
   /* -------------------------------------------------------
-    Handle cover image upload
+    Helper: inject filename into base64 data URL
+    Example: data:image/png;base64,AAA -> data:image/png;name=foo.png;base64,AAA
+  ------------------------------------------------------- */
+  function injectFilenameToDataUrl(dataUrl: string, filename: string) {
+    // make filename URL-safe
+    const safe = encodeURIComponent(filename);
+    return dataUrl.replace(
+      /^data:(image\/[^;]+);base64,/,
+      `data:$1;name=${safe};base64,`,
+    );
+  }
+
+  /* -------------------------------------------------------
+    Handle cover image upload (preserve original filename)
   ------------------------------------------------------- */
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -132,9 +145,13 @@ export default function CreateBlogPage() {
 
     const reader = new FileReader();
     reader.onloadend = () => {
-      const base64String = reader.result as string;
-      setCoverImage(base64String);
-      setImagePreview(base64String);
+      const rawBase64 = reader.result as string;
+
+      // inject filename
+      const withName = injectFilenameToDataUrl(rawBase64, file.name);
+
+      setCoverImage(withName);
+      setImagePreview(withName);
       setMessage(null);
     };
     reader.onerror = () => {
@@ -144,7 +161,7 @@ export default function CreateBlogPage() {
   };
 
   /* -------------------------------------------------------
-    Handle inline image with placeholder
+    Handle inline image with placeholder (preserve filename)
   ------------------------------------------------------- */
   const handleInlineImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -163,7 +180,11 @@ export default function CreateBlogPage() {
 
     const reader = new FileReader();
     reader.onloadend = () => {
-      const base64String = reader.result as string;
+      const rawBase64 = reader.result as string;
+
+      // inject filename
+      const base64WithName = injectFilenameToDataUrl(rawBase64, file.name);
+
       const el = textareaRef.current;
       if (!el) return;
 
@@ -175,7 +196,7 @@ export default function CreateBlogPage() {
       // Store the image data separately
       const newImage: InlineImage = {
         id: imageId,
-        base64: base64String,
+        base64: base64WithName,
         placeholder: placeholder,
       };
       setInlineImages((prev) => [...prev, newImage]);
@@ -225,24 +246,16 @@ export default function CreateBlogPage() {
     setMessage(null);
 
     try {
-      // Replace placeholders with actual base64 images
-      let finalContent = content;
-      inlineImages.forEach((img) => {
-        finalContent = finalContent.replace(
-          img.placeholder,
-          `![image](${img.base64})`
-        );
-      });
-
       const res = await fetch("/api/blogs/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: title.trim(),
           slug: slug.trim(),
-          content: finalContent.trim(),
+          content: content.trim(),
           description: description.trim(),
           coverImage: coverImage || undefined,
+          inlineImages,
           categories: selectedCategories,
         }),
       });
@@ -337,9 +350,6 @@ export default function CreateBlogPage() {
     setContent(el.value);
   }
 
-  /* -------------------------------------------------------
-     Handle Enter key for smart list continuation
-  ------------------------------------------------------- */
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key !== "Enter") return;
 
@@ -392,15 +402,12 @@ export default function CreateBlogPage() {
     }
   }
 
-  /* -------------------------------------------------------
-     Helper functions for categories
-  ------------------------------------------------------- */
   const getCategoryName = (slug: string) => {
     return categories.find((c) => c.slug === slug)?.name || slug;
   };
 
   const availableCategories = categories.filter(
-    (cat) => !selectedCategories.includes(cat.slug)
+    (cat) => !selectedCategories.includes(cat.slug),
   );
 
   if (!user) {
@@ -411,9 +418,6 @@ export default function CreateBlogPage() {
     );
   }
 
-  /* -------------------------------------------------------
-     UI
-  ------------------------------------------------------- */
   return (
     <motion.main
       initial={{ opacity: 0, y: 40 }}
@@ -541,7 +545,7 @@ export default function CreateBlogPage() {
                     type="button"
                     onClick={() => {
                       setSelectedCategories(
-                        selectedCategories.filter((c) => c !== catSlug)
+                        selectedCategories.filter((c) => c !== catSlug),
                       );
                     }}
                     className="text-gray-500 hover:text-red-400 transition"
