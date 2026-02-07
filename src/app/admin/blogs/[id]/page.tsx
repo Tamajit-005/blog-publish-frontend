@@ -1,3 +1,4 @@
+//src/app/admin/blogs/[id]/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -10,6 +11,12 @@ import rehypeRaw from "rehype-raw";
 import moment from "moment";
 import { toast } from "react-hot-toast";
 
+interface InlineImage {
+  id: string;
+  placeholder: string;
+  base64: string;
+}
+
 interface Blog {
   _id: string;
   title: string;
@@ -17,6 +24,7 @@ interface Blog {
   content: string;
   description?: string;
   coverImage?: string;
+  inlineImages?: InlineImage[];
   categories: string[];
   author: {
     auth0Id: string;
@@ -44,8 +52,8 @@ export default function AdminBlogDetailPage() {
     typeof params?.id === "string"
       ? params.id
       : Array.isArray(params?.id)
-      ? params.id[0]
-      : "";
+        ? params.id[0]
+        : "";
 
   const [blog, setBlog] = useState<Blog | null>(null);
   const [loading, setLoading] = useState(true);
@@ -74,6 +82,27 @@ export default function AdminBlogDetailPage() {
     fetchBlog();
   }, [blogId]);
 
+  // Process content to inject inline images
+  const getProcessedContent = (currentBlog: Blog) => {
+    let content = currentBlog.content || "";
+
+    if (currentBlog.inlineImages && currentBlog.inlineImages.length > 0) {
+      currentBlog.inlineImages.forEach((img) => {
+        if (img.placeholder && img.base64) {
+          const cleanBase64 = img.base64.trim();
+
+          // Inject raw HTML for inline images
+          content = content
+            .split(img.placeholder)
+            .join(
+              `<img src="${cleanBase64}" alt="Inline Image" class="rounded-lg w-full my-4 object-cover" />`,
+            );
+        }
+      });
+    }
+    return content;
+  };
+
   if (loading) {
     return (
       <div className="w-full min-h-screen flex items-center justify-center bg-slate-950">
@@ -89,6 +118,9 @@ export default function AdminBlogDetailPage() {
       </div>
     );
   }
+
+  // Generate content with images injected
+  const finalContent = getProcessedContent(blog);
 
   return (
     <motion.div
@@ -130,10 +162,10 @@ export default function AdminBlogDetailPage() {
               blog.status === "pending"
                 ? "bg-yellow-500/20 text-yellow-400 border-yellow-500"
                 : blog.status === "approved"
-                ? "bg-blue-500/20 text-blue-400 border-blue-500"
-                : blog.status === "rejected"
-                ? "bg-red-500/20 text-red-400 border-red-500"
-                : "bg-green-500/20 text-green-400 border-green-500"
+                  ? "bg-blue-500/20 text-blue-400 border-blue-500"
+                  : blog.status === "rejected"
+                    ? "bg-red-500/20 text-red-400 border-red-500"
+                    : "bg-green-500/20 text-green-400 border-green-500"
             }`}
           >
             {blog.status.toUpperCase()}
@@ -197,7 +229,10 @@ export default function AdminBlogDetailPage() {
           <Markdown
             remarkPlugins={[remarkGfm, remarkBreaks]}
             rehypePlugins={[rehypeRaw]}
+            // Allows data:image URLs to be rendered
+            urlTransform={(value) => value}
             components={{
+              /* HEADINGS */
               h1: ({ children }) => (
                 <h1 className="text-3xl font-bold text-teal-400 mt-10 mb-4 border-b border-teal-800 pb-2">
                   {children}
@@ -218,55 +253,96 @@ export default function AdminBlogDetailPage() {
                   {children}
                 </h4>
               ),
+
+              /* TEXT */
               p: ({ children }) => (
                 <p className="text-gray-300 leading-relaxed my-3">{children}</p>
               ),
+
+              ul: ({ children }) => (
+                <ul className="list-disc list-inside my-4 pl-2 text-gray-300 space-y-1">
+                  {children}
+                </ul>
+              ),
+              ol: ({ children }) => (
+                <ol className="list-decimal list-inside my-4 pl-2 text-gray-300 space-y-1">
+                  {children}
+                </ol>
+              ),
+              li: ({ children }) => <li className="ml-2">{children}</li>,
+
               blockquote: ({ children }) => (
                 <blockquote className="border-l-4 border-teal-500 pl-4 ml-2 italic text-gray-400 my-4">
                   {children}
                 </blockquote>
               ),
+
+              /* FORMATTING */
               u: ({ children }) => (
                 <u className="underline decoration-teal-500">{children}</u>
               ),
-              img: ({ src, alt }) => {
-                // Don't render if src is empty, invalid, or not a string
-                if (!src || typeof src !== "string" || src.trim() === "") {
-                  return null;
+
+              /* CODE BLOCK CONTAINER */
+              pre: ({ children }) => {
+                return (
+                  <pre
+                    className="bg-slate-900 border border-slate-800 rounded-lg p-4 my-4 overflow-x-auto cursor-pointer relative group"
+                    onClick={(e) => {
+                      const text = e.currentTarget.innerText;
+                      handleCopyCode(text);
+                    }}
+                  >
+                    {children}
+                  </pre>
+                );
+              },
+
+              /* CODE TEXT */
+              code: ({ children, className }) => {
+                const isInline = !className;
+
+                if (isInline) {
+                  return (
+                    <code className="text-teal-300 px-1.5 py-0.5 rounded text-sm">
+                      {children}
+                    </code>
+                  );
                 }
+
+                return (
+                  <code className="text-teal-300 text-sm block whitespace-pre">
+                    {children}
+                  </code>
+                );
+              },
+
+              /* IMAGES */
+              img: ({ src, alt, className }) => {
+                if (!src) return null;
+
                 return (
                   <img
-                    src={src}
+                    src={src as string}
                     alt={alt || "Blog image"}
-                    className="rounded-lg w-full my-4 object-cover max-h-[500px]"
+                    className={
+                      className ||
+                      "rounded-lg w-full my-4 object-cover max-h-[500px]"
+                    }
                     loading="lazy"
                     onError={(e) => {
+                      const safeSrc = String(src);
+                      console.error(
+                        "Image failed to load:",
+                        safeSrc.substring(0, 50) + "...",
+                      );
                       e.currentTarget.style.display = "none";
                     }}
                   />
                 );
               },
-              code: ({ children }) => (
-                <code
-                  className="bg-slate-800/70 text-teal-300 px-2 py-1 rounded block my-3 whitespace-pre cursor-pointer hover:bg-slate-800"
-                  onClick={() => handleCopyCode(String(children))}
-                >
-                  {children}
-                </code>
-              ),
-              ul: ({ children }) => (
-                <ul className="list-disc list-inside my-3 text-gray-300">
-                  {children}
-                </ul>
-              ),
-              ol: ({ children }) => (
-                <ol className="list-decimal list-inside my-3 text-gray-300">
-                  {children}
-                </ol>
-              ),
             }}
           >
-            {blog.content || ""}
+            {finalContent}
           </Markdown>
         </motion.div>
 
