@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import BlogPagination from "@/components/Pagination";
 import { motion } from "framer-motion";
+import { toast } from "react-hot-toast";
 
 const POSTS_PER_PAGE = 6;
 
@@ -47,6 +48,34 @@ export default function BlogsClient() {
 
     fetchBlogs();
   }, []);
+
+  // Delete Handler
+  const handleDelete = async (e: React.MouseEvent, blogId: string) => {
+    // Prevent the parent onClick (navigation) from firing
+    e.stopPropagation();
+
+    if (!confirm("Are you sure you want to delete this blog?")) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/blogs/${blogId}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        toast.success("Blog deleted successfully");
+        // Remove locally to avoid refetch
+        setBlogs((prev) => (prev ? prev.filter((b) => b._id !== blogId) : []));
+      } else {
+        const data = await res.json();
+        toast.error(data.error || "Failed to delete blog");
+      }
+    } catch (err) {
+      console.error("Delete error:", err);
+      toast.error("Failed to delete blog");
+    }
+  };
 
   if (loading) {
     return (
@@ -117,7 +146,7 @@ export default function BlogsClient() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.05 }}
           >
-            {/* ✅ Make entire card clickable */}
+            {/* Make entire card clickable */}
             <div
               onClick={() => {
                 // If published, go to Strapi blog, else go to MongoDB preview
@@ -127,8 +156,32 @@ export default function BlogsClient() {
                   router.push(`/blogs/my/${blog._id}`);
                 }
               }}
-              className="group block bg-gray-900 border border-gray-800 rounded-xl overflow-hidden hover:scale-[1.02] hover:border-teal-500 transition-all duration-300 cursor-pointer"
+              className="group block bg-gray-900 border border-gray-800 rounded-xl overflow-hidden hover:scale-[1.02] hover:border-teal-500 transition-all duration-300 cursor-pointer relative"
             >
+              {/* DELETE BUTTON (Visible for Pending/Rejected) */}
+              {(blog.status === "pending" || blog.status === "rejected") && (
+                <button
+                  onClick={(e) => handleDelete(e, blog._id)}
+                  className="absolute top-3 right-3 z-20 p-2 bg-red-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 shadow-lg"
+                  title="Delete Blog"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                    />
+                  </svg>
+                </button>
+              )}
+
               {/* COVER IMAGE */}
               {blog.coverImage ? (
                 <div className="relative w-full h-48 bg-gray-800">
@@ -161,7 +214,7 @@ export default function BlogsClient() {
                 <div className="mb-3">
                   <span
                     className={`text-xs px-2 py-1 rounded border ${getStatusColor(
-                      blog.status
+                      blog.status,
                     )}`}
                   >
                     {blog.status.toUpperCase()}
