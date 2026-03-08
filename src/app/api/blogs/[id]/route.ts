@@ -84,16 +84,23 @@ export async function DELETE(
       );
     }
 
+    // Request deletion for published blogs
     if (blog.status === "published" || blog.status === "approved") {
-      return NextResponse.json(
-        { error: "Cannot delete published or approved blogs" },
-        { status: 400 }
-      );
+      blog.deletionRequested = true;
+      await blog.save();
+      
+      return NextResponse.json({ 
+        message: "Deletion requested successfully. Waiting for admin approval.",
+        action: "requested" 
+      });
     }
 
     await Blog.findByIdAndDelete(id);
 
-    return NextResponse.json({ message: "Blog deleted successfully" });
+    return NextResponse.json({ 
+      message: "Blog deleted successfully",
+      action: "deleted"
+    });
   } catch (error) {
     console.error("❌ Error deleting blog:", error);
     return NextResponse.json(
