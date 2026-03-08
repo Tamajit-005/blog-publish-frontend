@@ -26,6 +26,9 @@ export interface IBlog extends Document {
   };
 
   status: "draft" | "pending" | "approved" | "rejected" | "published";
+  
+  // Track deletion requests
+  deletionRequested?: boolean;
 
   adminNotes?: string;
 
@@ -104,6 +107,12 @@ const BlogSchema = new mongoose.Schema<IBlog>(
       default: "pending",
     },
 
+    // ✅ NEW FIELD DEFINITION
+    deletionRequested: {
+      type: Boolean,
+      default: false,
+    },
+
     adminNotes: String,
     strapiId: Number,
     strapiWriterId: Number,
@@ -116,6 +125,8 @@ const BlogSchema = new mongoose.Schema<IBlog>(
 BlogSchema.index({ "author.auth0Id": 1, status: 1 });
 BlogSchema.index({ status: 1, createdAt: -1 });
 BlogSchema.index({ categories: 1 });
+// Index for admin to find requests easily
+BlogSchema.index({ deletionRequested: 1 });
 
 if (mongoose.models.Blog) delete mongoose.models.Blog;
 
