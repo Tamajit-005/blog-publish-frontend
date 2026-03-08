@@ -20,6 +20,8 @@ interface Blog {
   adminNotes?: string;
   createdAt: string;
   updatedAt: string;
+  // ✅ New field
+  deletionRequested?: boolean;
 }
 
 export default function BlogsClient() {
@@ -50,25 +52,46 @@ export default function BlogsClient() {
   }, []);
 
   // Delete Handler
-  const handleDelete = async (e: React.MouseEvent, blogId: string) => {
+  const handleDelete = async (e: React.MouseEvent, blog: Blog) => {
     // Prevent the parent onClick (navigation) from firing
     e.stopPropagation();
 
-    if (!confirm("Are you sure you want to delete this blog?")) {
+    const isPublished =
+      blog.status === "published" || blog.status === "approved";
+    const confirmMessage = isPublished
+      ? "This blog is published. Do you want to send a request to the Admin to delete it?"
+      : "Are you sure you want to delete this blog?";
+
+    if (!confirm(confirmMessage)) {
       return;
     }
 
     try {
-      const res = await fetch(`/api/blogs/${blogId}`, {
+      const res = await fetch(`/api/blogs/${blog._id}`, {
         method: "DELETE",
       });
 
+      const data = await res.json();
+
       if (res.ok) {
-        toast.success("Blog deleted successfully");
-        // Remove locally to avoid refetch
-        setBlogs((prev) => (prev ? prev.filter((b) => b._id !== blogId) : []));
+        if (data.action === "requested") {
+          toast.success("Deletion request sent to Admin");
+          // Update local state to reflect request
+          setBlogs((prev) =>
+            prev
+              ? prev.map((b) =>
+                  b._id === blog._id ? { ...b, deletionRequested: true } : b,
+                )
+              : [],
+          );
+        } else {
+          toast.success("Blog deleted successfully");
+          // Remove locally to avoid refetch
+          setBlogs((prev) =>
+            prev ? prev.filter((b) => b._id !== blog._id) : [],
+          );
+        }
       } else {
-        const data = await res.json();
         toast.error(data.error || "Failed to delete blog");
       }
     } catch (err) {
@@ -158,13 +181,37 @@ export default function BlogsClient() {
               }}
               className="group block bg-gray-900 border border-gray-800 rounded-xl overflow-hidden hover:scale-[1.02] hover:border-teal-500 transition-all duration-300 cursor-pointer relative"
             >
-              {/* DELETE BUTTON (Visible for Pending/Rejected) */}
-              {(blog.status === "pending" || blog.status === "rejected") && (
-                <button
-                  onClick={(e) => handleDelete(e, blog._id)}
-                  className="absolute top-3 right-3 z-20 p-2 bg-red-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 shadow-lg"
-                  title="Delete Blog"
-                >
+              {/* DELETE BUTTON (Visible for All Statuses) */}
+              <button
+                onClick={(e) => handleDelete(e, blog)}
+                className={`absolute top-3 right-3 z-20 p-2 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg ${
+                  blog.deletionRequested
+                    ? "bg-yellow-600/80 hover:bg-yellow-700 cursor-default"
+                    : "bg-red-500/80 hover:bg-red-600"
+                }`}
+                title={
+                  blog.deletionRequested ? "Deletion Requested" : "Delete Blog"
+                }
+                disabled={!!blog.deletionRequested}
+              >
+                {blog.deletionRequested ? (
+                  // Clock Icon for pending request
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                ) : (
+                  // Trash Icon
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     className="h-4 w-4"
@@ -179,8 +226,8 @@ export default function BlogsClient() {
                       d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
                     />
                   </svg>
-                </button>
-              )}
+                )}
+              </button>
 
               {/* COVER IMAGE */}
               {blog.coverImage ? (
@@ -211,7 +258,7 @@ export default function BlogsClient() {
 
               <div className="p-5">
                 {/* STATUS BADGE */}
-                <div className="mb-3">
+                <div className="flex justify-between items-start mb-3">
                   <span
                     className={`text-xs px-2 py-1 rounded border ${getStatusColor(
                       blog.status,
@@ -219,6 +266,11 @@ export default function BlogsClient() {
                   >
                     {blog.status.toUpperCase()}
                   </span>
+                  {blog.deletionRequested && (
+                    <span className="text-[10px] text-yellow-500 font-medium bg-yellow-500/10 px-2 py-1 rounded border border-yellow-500/30">
+                      Deletion Requested
+                    </span>
+                  )}
                 </div>
 
                 {/* TITLE */}
