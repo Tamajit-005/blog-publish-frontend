@@ -93,7 +93,7 @@ export const GET = handleAuth({
     const url = req.url ? new URL(req.url) : null;
     const returnTo = url?.searchParams.get("returnTo") || "/";
     
-    // Extract the connection (e.g., google-oauth2 or github)
+    // Extract the connection (e.g., google-oauth2)
     const connection = url?.searchParams.get("connection");
 
     const authorizationParams: Record<string, any> = {
