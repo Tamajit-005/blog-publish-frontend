@@ -107,7 +107,7 @@ const BlogSchema = new mongoose.Schema<IBlog>(
       default: "pending",
     },
 
-    // ✅ NEW FIELD DEFINITION
+    // Field to track if deletion has been requested by the author
     deletionRequested: {
       type: Boolean,
       default: false,

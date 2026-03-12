@@ -1,5 +1,5 @@
 import { handleAuth, handleLogin, handleCallback, Session } from "@auth0/nextjs-auth0";
-import { NextRequest } from "next/server";
+import { NextRequest } from "next/server"; 
 import connectToDatabase from "@/lib/mongoose";
 import User from "@/models/User";
 import { getIronSession } from "iron-session";
@@ -14,7 +14,7 @@ async function afterCallback(req: NextRequest, session: Session, state: any) {
     return session;
   }
 
-  console.log("✅ afterCallback executed for Social/Auth0 Login");
+  console.log("✅ afterCallback executed for Auth0 Login");
 
   try {
     const conn = await connectToDatabase();
@@ -89,25 +89,12 @@ async function afterCallback(req: NextRequest, session: Session, state: any) {
 
 export const GET = handleAuth({
   login: handleLogin((req) => {
-    // Safely parse the URL
+    // Safely parse the URL to preserve returnTo behavior
     const url = req.url ? new URL(req.url) : null;
     const returnTo = url?.searchParams.get("returnTo") || "/";
     
-    // Extract the connection (e.g., google-oauth2 or github)
-    const connection = url?.searchParams.get("connection");
-
-    const authorizationParams: Record<string, any> = {
-      screen_hint: "login",
-    };
-
-    // If a connection is passed, tell Auth0 to skip the default login page
-    if (connection) {
-      authorizationParams.connection = connection;
-    }
-
     return {
       returnTo,
-      authorizationParams,
     };
   }),
   callback: handleCallback({ afterCallback }),
