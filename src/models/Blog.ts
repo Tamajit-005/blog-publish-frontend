@@ -1,0 +1,134 @@
+import mongoose, { Document, Model } from "mongoose";
+
+export interface IBlog extends Document {
+  title: string;
+  slug: string;
+  content: string;
+  description: string;
+
+  // Cover image
+  coverImage?: string;
+  coverImageName?: string;
+
+  // INLINE IMAGES
+  inlineImages?: {
+    id: string;
+    placeholder: string;
+    base64: string;
+  }[];
+
+  categories: string[];
+
+  author: {
+    auth0Id: string;
+    username: string;
+    email: string;
+  };
+
+  status: "draft" | "pending" | "approved" | "rejected" | "published";
+  
+  // Track deletion requests
+  deletionRequested?: boolean;
+
+  adminNotes?: string;
+
+  strapiId?: number;
+  strapiWriterId?: number;
+
+  publishedAt?: Date;
+  rejectedAt?: Date;
+
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const BlogSchema = new mongoose.Schema<IBlog>(
+  {
+    title: {
+      type: String,
+      required: true,
+      trim: true,
+      minlength: 10,
+      maxlength: 200,
+    },
+
+    slug: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+    },
+
+    content: {
+      type: String,
+      required: true,
+      minlength: 100,
+    },
+
+    description: {
+      type: String,
+      required: true,
+      trim: true,
+      minlength: 10,
+      maxlength: 300,
+    },
+
+    coverImage: String,
+    coverImageName: String,
+
+    // INLINE IMAGES FIELD
+    inlineImages: [
+      {
+        id: { type: String, required: true },
+        placeholder: { type: String, required: true },
+        base64: { type: String, required: true },
+      },
+    ],
+
+    categories: {
+      type: [String],
+      required: true,
+      validate: {
+        validator: (v: string[]) => v.length > 0 && v.length <= 3,
+        message: "Please select 1-3 categories",
+      },
+    },
+
+    author: {
+      auth0Id: { type: String, required: true },
+      username: { type: String, required: true },
+      email: { type: String, required: true },
+    },
+
+    status: {
+      type: String,
+      enum: ["draft", "pending", "approved", "rejected", "published"],
+      default: "pending",
+    },
+
+    // ✅ NEW FIELD DEFINITION
+    deletionRequested: {
+      type: Boolean,
+      default: false,
+    },
+
+    adminNotes: String,
+    strapiId: Number,
+    strapiWriterId: Number,
+    publishedAt: Date,
+    rejectedAt: Date,
+  },
+  { timestamps: true, strict: true }
+);
+
+BlogSchema.index({ "author.auth0Id": 1, status: 1 });
+BlogSchema.index({ status: 1, createdAt: -1 });
+BlogSchema.index({ categories: 1 });
+// Index for admin to find requests easily
+BlogSchema.index({ deletionRequested: 1 });
+
+if (mongoose.models.Blog) delete mongoose.models.Blog;
+
+const Blog: Model<IBlog> = mongoose.model<IBlog>("Blog", BlogSchema);
+export default Blog;

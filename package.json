@@ -1,0 +1,51 @@
+{
+  "name": "blog-publish-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "promote-user": "node scripts/promote-superadmin.js"
+  },
+  "dependencies": {
+    "@apollo/client": "^4.0.9",
+    "@auth0/nextjs-auth0": "^3.8.0",
+    "@emailjs/browser": "^4.4.1",
+    "auth0": "^5.2.0",
+    "axios": "^1.13.2",
+    "classnames": "^2.5.1",
+    "dotenv": "^17.2.3",
+    "framer-motion": "^12.23.24",
+    "graphql": "^16.12.0",
+    "iron-session": "^8.0.4",
+    "js-cookie": "^3.0.5",
+    "lucide-react": "^0.552.0",
+    "moment": "^2.30.1",
+    "mongodb": "^7.0.0",
+    "mongoose": "^8.20.2",
+    "next": "^15.2.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-hot-toast": "^2.6.0",
+    "react-icons": "^5.5.0",
+    "react-loader-spinner": "^8.0.0",
+    "react-markdown": "^10.1.0",
+    "rehype-raw": "^7.0.0",
+    "remark-breaks": "^4.0.0",
+    "remark-gfm": "^4.0.1",
+    "resend": "^6.6.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/moment": "^2.11.29",
+    "@types/node": "^20",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.14",
+    "typescript": "^5.9.3"
+  }
+}
