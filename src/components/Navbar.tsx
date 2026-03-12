@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FaSearch, FaTimes, FaBars } from "react-icons/fa";
@@ -14,43 +14,63 @@ const Navbar = () => {
   const [username, setUsername] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [toast, setToast] = useState<string | null>(null);
 
   const router = useRouter();
+  const profileRef = useRef<HTMLDivElement | null>(null);
 
-  // Fetch user session
+  // Fetches user session data on mount
   useEffect(() => {
     fetch("/api/user/username")
       .then((res) => {
-        if (res.ok) {
-          return res.json();
-        }
-        throw new Error("Not authenticated");
+        if (!res.ok) throw new Error("Not authenticated");
+        return res.json();
       })
       .then((data) => {
         setUsername(data.username);
-        setUser({ email: data.email });
+        setUser(data);
       })
       .catch(() => {
-        // User not logged in
         setUsername(null);
         setUser(null);
       })
-      .finally(() => {
-        setIsLoading(false);
-      });
+      .finally(() => setIsLoading(false));
   }, []);
 
+  // Handles user logout
   const handleLogout = () => {
     window.location.href = "/api/auth/custom-logout";
   };
 
-  const getInitials = (name: string | undefined) => {
-    if (!name) return "U";
-    const parts = name.split(" ");
-    if (parts.length === 1) return parts[0][0].toUpperCase();
-    return (parts[0][0] + parts[1][0]).toUpperCase();
+  // Requests a password reset link
+  const handleChangePassword = async () => {
+    await fetch("/api/auth/reset-password", { method: "POST" });
+    setToast("Password reset link sent to your email");
+    setProfileOpen(false);
+    setTimeout(() => setToast(null), 3000);
   };
 
+  // Closes the profile dropdown when clicking outside of it
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (
+        profileRef.current &&
+        !profileRef.current.contains(e.target as Node)
+      ) {
+        setProfileOpen(false);
+      }
+    };
+
+    if (profileOpen) document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [profileOpen]);
+
+  // Disables background scrolling when modals are open
+  useEffect(() => {
+    document.body.style.overflow = menuOpen || searchOpen ? "hidden" : "";
+  }, [menuOpen, searchOpen]);
+
+  // Submits the search query
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const q = searchQuery.trim();
@@ -59,9 +79,13 @@ const Navbar = () => {
     setMenuOpen(false);
   };
 
-  useEffect(() => {
-    document.body.style.overflow = menuOpen || searchOpen ? "hidden" : "";
-  }, [menuOpen, searchOpen]);
+  // Generates user initials for the avatar
+  const getInitials = (name: string | undefined | null) => {
+    if (!name) return "U";
+    const parts = name.split(" ");
+    if (parts.length === 1) return parts[0][0].toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  };
 
   const displayName = username || "User";
 
@@ -72,7 +96,6 @@ const Navbar = () => {
           <img src="/images/Logo.png" alt="Logo" className="h-12 w-auto" />
         </Link>
 
-        {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-6 font-medium">
           <Link href="/blogs" className="hover:text-teal-400 transition-colors">
             Blogs
@@ -96,7 +119,7 @@ const Navbar = () => {
                     Create
                   </button>
 
-                  <div className="relative">
+                  <div className="relative" ref={profileRef}>
                     <button
                       onClick={() => setProfileOpen((prev) => !prev)}
                       className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-800 border border-gray-600 hover:border-teal-500 transition text-teal-300 font-bold"
@@ -111,7 +134,7 @@ const Navbar = () => {
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: -8 }}
                           transition={{ duration: 0.2 }}
-                          className="absolute right-0 mt-2 bg-[#1a1c29] w-48 rounded-lg shadow-lg border border-gray-700 text-sm z-50"
+                          className="absolute right-0 mt-2 bg-[#1a1c29] w-48 rounded-lg shadow-lg border border-gray-700 text-sm z-50 overflow-hidden"
                         >
                           <div className="px-4 py-3 border-b border-gray-700 text-gray-300">
                             Logged in as
@@ -128,6 +151,23 @@ const Navbar = () => {
                           >
                             Your Posts
                           </Link>
+
+                          {user?.role && ["admin", "superadmin"].includes(user.role) && (
+                            <Link
+                              href="/admin/blogs"
+                              onClick={() => setProfileOpen(false)}
+                              className="block px-4 py-2 text-white hover:bg-yellow-700 transition"
+                            >
+                              Pending Blogs
+                            </Link>
+                          )}
+
+                          <button
+                            onClick={handleChangePassword}
+                            className="block w-full text-left px-4 py-2 hover:bg-teal-900 transition"
+                          >
+                            Change Password
+                          </button>
 
                           <button
                             onClick={handleLogout}
@@ -168,7 +208,20 @@ const Navbar = () => {
         </button>
       </div>
 
-      {/* Mobile Menu & Search Modal - keep existing code */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          >
+            <motion.div className="bg-slate-900 border border-teal-500 text-teal-400 px-6 py-4 rounded-xl shadow-2xl text-sm">
+              {toast}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </header>
   );
 };
