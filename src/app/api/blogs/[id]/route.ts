@@ -20,17 +20,12 @@ export async function GET(
     await dbConnect();
 
     const { id } = await params;
-    
     const blog = await Blog.findById(id).lean();
 
     if (!blog) {
-      return NextResponse.json(
-        { error: "Blog not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Blog not found" }, { status: 404 });
     }
 
-    // Ensure user owns this blog
     if (blog.author.auth0Id !== auth.user.auth0Id) {
       return NextResponse.json(
         { error: "You don't have permission to view this blog" },
@@ -41,14 +36,10 @@ export async function GET(
     return NextResponse.json({ blog });
   } catch (error) {
     console.error("❌ Error fetching blog:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch blog" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to fetch blog" }, { status: 500 });
   }
 }
 
-// Only allow deletion of blogs that are not published or approved
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -66,17 +57,12 @@ export async function DELETE(
     await dbConnect();
 
     const { id } = await params;
-
     const blog = await Blog.findById(id);
 
     if (!blog) {
-      return NextResponse.json(
-        { error: "Blog not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Blog not found" }, { status: 404 });
     }
 
-    // Ensure user owns this blog
     if (blog.author.auth0Id !== auth.user.auth0Id) {
       return NextResponse.json(
         { error: "You don't have permission to delete this blog" },
@@ -84,28 +70,27 @@ export async function DELETE(
       );
     }
 
-    // Request deletion for published blogs
     if (blog.status === "published" || blog.status === "approved") {
       blog.deletionRequested = true;
+      // Clear any previous rejection state when user re-requests deletion
+      blog.isDeletionRejected = false;
+      blog.deletionRejectedNotes = undefined;
       await blog.save();
-      
-      return NextResponse.json({ 
+
+      return NextResponse.json({
         message: "Deletion requested successfully. Waiting for admin approval.",
-        action: "requested" 
+        action: "requested",
       });
     }
 
     await Blog.findByIdAndDelete(id);
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       message: "Blog deleted successfully",
-      action: "deleted"
+      action: "deleted",
     });
   } catch (error) {
     console.error("❌ Error deleting blog:", error);
-    return NextResponse.json(
-      { error: "Failed to delete blog" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to delete blog" }, { status: 500 });
   }
 }

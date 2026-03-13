@@ -10,7 +10,7 @@ const MAX_CONTENT_CHARS = 100_000;
 
 /* ───────────────── HELPERS ───────────────── */
 
-/**
+/*
  * Login to Strapi if credentials already exist in MongoDB.
  * Otherwise register once, store password in MongoDB, and reuse forever.
  */
