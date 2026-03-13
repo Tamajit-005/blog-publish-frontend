@@ -18,15 +18,14 @@ export async function GET(req: NextRequest) {
 
     const blogs = await Blog.find({ "author.auth0Id": auth.user.auth0Id })
       .sort({ createdAt: -1 })
-      .select("title slug description categories coverImage status adminNotes createdAt updatedAt")
+      .select(
+        "title slug description categories coverImage status adminNotes createdAt updatedAt deletionRequested isDeletionRejected deletionRejectedNotes isEditPending isEditRejected pendingEdit"
+      )
       .lean();
 
     return NextResponse.json({ blogs });
   } catch (error) {
     console.error("❌ Error fetching user blogs:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch blogs" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to fetch blogs" }, { status: 500 });
   }
 }

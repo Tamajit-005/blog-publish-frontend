@@ -24,22 +24,23 @@ export default function HomePage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const isAdmin =
-    user?.role === "admin" || user?.role === "superadmin";
+  const isAdmin = user?.role === "admin" || user?.role === "superadmin";
 
   return (
     <main className="min-h-screen flex flex-col justify-center items-center bg-slate-950 text-gray-200 px-6 text-center">
-      {/* 🔹 TITLE */}
+      {/* TITLE */}
       <motion.h1
         initial={{ opacity: 0, y: 40 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
         className="text-5xl md:text-6xl font-bold text-teal-400 mb-4"
       >
-        {user ? `Welcome back, ${user.username} 👋` : "Welcome to Palette Publisher"}
+        {user
+          ? `Welcome back, ${user.username}`
+          : "Welcome to Palette Publisher"}
       </motion.h1>
 
-      {/* 🔹 SUBTITLE */}
+      {/* SUBTITLE */}
       <motion.p
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -61,7 +62,7 @@ export default function HomePage() {
         )}
       </motion.p>
 
-      {/* 🔹 CTA BUTTONS */}
+      {/* ACTION BUTTONS */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -70,7 +71,7 @@ export default function HomePage() {
       >
         {!loading && (
           <>
-            {/* ❌ NOT LOGGED IN */}
+            {/* NOT LOGGED IN */}
             {!user && (
               <>
                 <Link
@@ -93,7 +94,7 @@ export default function HomePage() {
               </>
             )}
 
-            {/* ✅ LOGGED IN – USER / ADMIN */}
+            {/* LOGGED IN – USER / ADMIN */}
             {user && (
               <>
                 <Link
@@ -102,10 +103,10 @@ export default function HomePage() {
                              rounded-lg hover:bg-teal-500 hover:text-slate-900
                              font-semibold transition-all duration-200"
                 >
-                  Explore / Create Blogs
+                  Create Blogs
                 </Link>
 
-                {/* 🌍 VISIT MAIN SITE */}
+                {/* VISIT POST PALETTE */}
                 <a
                   href="https://strapi-rho-five.vercel.app/"
                   target="_blank"
@@ -114,12 +115,12 @@ export default function HomePage() {
                              rounded-lg hover:bg-gray-700 hover:text-white
                              font-semibold transition-all duration-200"
                 >
-                  Visit Main Site
+                  Visit POST PALETTE
                 </a>
               </>
             )}
 
-            {/* 🟡 ADMIN + SUPERADMIN */}
+            {/* ADMIN + SUPERADMIN */}
             {isAdmin && (
               <Link
                 href="/admin/blogs"
@@ -134,7 +135,7 @@ export default function HomePage() {
         )}
       </motion.div>
 
-      {/* 🔹 FOOTER */}
+      {/* FOOTER */}
       <footer className="mt-16 text-sm text-gray-600">
         © {new Date().getFullYear()} Palette Publisher. All rights reserved.
       </footer>
