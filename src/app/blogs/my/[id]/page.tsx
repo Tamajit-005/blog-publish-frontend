@@ -1,3 +1,4 @@
+// MongoDB blog page (non published or pending edit) at /blogs/my/[id]
 "use client";
 
 import { useEffect, useState } from "react";
@@ -10,7 +11,6 @@ import rehypeRaw from "rehype-raw";
 import moment from "moment";
 import { toast } from "react-hot-toast";
 
-// Type definitions for blog and inline images
 interface InlineImage {
   id: string;
   placeholder: string;
@@ -35,9 +35,21 @@ interface Blog {
   adminNotes?: string;
   createdAt: string;
   updatedAt: string;
+
+  // Pending edit fields
+  isEditPending?: boolean;
+  pendingEdit?: {
+    title: string;
+    slug: string;
+    content: string;
+    description?: string;
+    coverImage?: string;
+    coverImageName?: string;
+    inlineImages?: InlineImage[];
+    categories: string[];
+  };
 }
 
-// Handles copying code blocks to clipboard
 const handleCopyCode = async (code: string) => {
   try {
     if (!code) return;
@@ -48,7 +60,6 @@ const handleCopyCode = async (code: string) => {
   }
 };
 
-// Main component for displaying a user's blog details
 export default function MyBlogDetailPage() {
   const router = useRouter();
   const params = useParams();
@@ -64,7 +75,6 @@ export default function MyBlogDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  /* 1. FETCH BLOG */
   useEffect(() => {
     if (!blogId) return;
 
@@ -80,12 +90,28 @@ export default function MyBlogDetailPage() {
         const mongoBlog: Blog = data.blog;
 
         if (mongoBlog.status === "published") {
-          const sres = await fetch(`/api/blogs/strapi/${mongoBlog.slug}`);
-          if (!sres.ok) {
-            setBlog(mongoBlog);
+          // If a pending edit exists, show the edited version for preview
+          if (mongoBlog.isEditPending && mongoBlog.pendingEdit) {
+            setBlog({
+              ...mongoBlog,
+              title: mongoBlog.pendingEdit.title,
+              slug: mongoBlog.pendingEdit.slug,
+              content: mongoBlog.pendingEdit.content,
+              description: mongoBlog.pendingEdit.description,
+              coverImage:
+                mongoBlog.pendingEdit.coverImage ?? mongoBlog.coverImage,
+              inlineImages: mongoBlog.pendingEdit.inlineImages ?? [],
+              categories: mongoBlog.pendingEdit.categories,
+            });
           } else {
-            const sdata = await sres.json();
-            setBlog({ ...sdata.blog, status: "published" });
+            // No pending edit — fetch live Strapi version
+            const sres = await fetch(`/api/blogs/strapi/${mongoBlog.slug}`);
+            if (!sres.ok) {
+              setBlog(mongoBlog);
+            } else {
+              const sdata = await sres.json();
+              setBlog({ ...sdata.blog, status: "published" });
+            }
           }
         } else {
           setBlog(mongoBlog);
@@ -100,7 +126,6 @@ export default function MyBlogDetailPage() {
     fetchBlog();
   }, [blogId]);
 
-  // Process content to inject inline images
   const getProcessedContent = (currentBlog: Blog) => {
     let content = currentBlog.content || "";
 
@@ -108,8 +133,6 @@ export default function MyBlogDetailPage() {
       currentBlog.inlineImages.forEach((img) => {
         if (img.placeholder && img.base64) {
           const cleanBase64 = img.base64.trim();
-
-          // Inject raw HTML for inline images
           content = content
             .split(img.placeholder)
             .join(
@@ -121,7 +144,6 @@ export default function MyBlogDetailPage() {
     return content;
   };
 
-  /* LOADING & ERROR STATES */
   if (loading) {
     return (
       <div className="w-full min-h-screen flex items-center justify-center bg-slate-950">
@@ -138,7 +160,6 @@ export default function MyBlogDetailPage() {
     );
   }
 
-  // Generate content with images injected
   const finalContent = getProcessedContent(blog);
 
   return (
@@ -190,6 +211,19 @@ export default function MyBlogDetailPage() {
             {blog.status.toUpperCase()}
           </span>
         </motion.div>
+
+        {/* PENDING EDIT BANNER */}
+        {blog.isEditPending && blog.status === "published" && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.28 }}
+            className="mt-4 bg-blue-500/10 border border-blue-500/40 text-blue-300 px-4 py-3 rounded-lg text-sm text-center"
+          >
+            ✏️ <span className="font-semibold">Pending Edit Preview</span> —
+            this version is under admin review and not yet live.
+          </motion.div>
+        )}
 
         {/* ADMIN NOTES */}
         {blog.status === "rejected" && blog.adminNotes && (
@@ -261,10 +295,8 @@ export default function MyBlogDetailPage() {
           <Markdown
             remarkPlugins={[remarkGfm, remarkBreaks]}
             rehypePlugins={[rehypeRaw]}
-            // Allows data:image URLs to be rendered
             urlTransform={(value) => value}
             components={{
-              /* HEADINGS */
               h1: ({ children }) => (
                 <h1 className="text-3xl font-bold text-teal-400 mt-10 mb-4 border-b border-teal-800 pb-2">
                   {children}
@@ -285,12 +317,9 @@ export default function MyBlogDetailPage() {
                   {children}
                 </h4>
               ),
-
-              /* TEXT */
               p: ({ children }) => (
                 <p className="text-gray-300 leading-relaxed my-3">{children}</p>
               ),
-
               ul: ({ children }) => (
                 <ul className="list-disc list-inside my-4 pl-2 text-gray-300 space-y-1">
                   {children}
@@ -302,32 +331,24 @@ export default function MyBlogDetailPage() {
                 </ol>
               ),
               li: ({ children }) => <li className="ml-2">{children}</li>,
-
               blockquote: ({ children }) => (
                 <blockquote className="border-l-4 border-teal-500 pl-4 ml-2 italic text-gray-400 my-4">
                   {children}
                 </blockquote>
               ),
-
-              /* ⬇️ CODE BLOCK CONTAINER ⬇️ */
-              pre: ({ children }) => {
-                return (
-                  <pre
-                    className="bg-slate-900 border border-slate-800 rounded-lg p-4 my-4 overflow-x-auto cursor-pointer relative group"
-                    onClick={(e) => {
-                      const text = e.currentTarget.innerText;
-                      handleCopyCode(text);
-                    }}
-                  >
-                    {children}
-                  </pre>
-                );
-              },
-
-              /* ⬇️ CODE TEXT ⬇️ */
+              pre: ({ children }) => (
+                <pre
+                  className="bg-slate-900 border border-slate-800 rounded-lg p-4 my-4 overflow-x-auto cursor-pointer relative group"
+                  onClick={(e) => {
+                    const text = e.currentTarget.innerText;
+                    handleCopyCode(text);
+                  }}
+                >
+                  {children}
+                </pre>
+              ),
               code: ({ children, className }) => {
                 const isInline = !className;
-
                 if (isInline) {
                   return (
                     <code className="text-teal-300 px-1.5 py-0.5 rounded text-sm">
@@ -335,18 +356,14 @@ export default function MyBlogDetailPage() {
                     </code>
                   );
                 }
-
                 return (
                   <code className="text-teal-300 text-sm block whitespace-pre">
                     {children}
                   </code>
                 );
               },
-
-              /* IMAGES */
               img: ({ src, alt, className }) => {
                 if (!src) return null;
-
                 return (
                   <img
                     src={src as string}
@@ -387,8 +404,6 @@ export default function MyBlogDetailPage() {
             </span>{" "}
             — {moment(blog.createdAt).fromNow()}
           </p>
-
-          {/* Email Contact Block */}
           {blog.author?.email && (
             <p className="text-gray-400 mt-1">
               Contact:{" "}
