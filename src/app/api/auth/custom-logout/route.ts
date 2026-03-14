@@ -6,7 +6,7 @@ import connectToDatabase from "@/lib/mongoose";
 import User from "@/models/User";
 
 export async function GET(req: NextRequest) {
-  console.log("🔥 LOGOUT ROUTE HIT");
+  console.log("LOGOUT ROUTE HIT");
 
   try {
     const cookieStore = await cookies();
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
           { new: true }
         );
 
-        console.log("✅ Mongo after logout update:", {
+        console.log("Mongo after logout update:", {
           user: updatedUser?.username,
           lastLogoutAt: updatedUser?.lastLogoutAt,
           lastLogoutIp: updatedUser?.lastLogoutIp,
@@ -46,10 +46,10 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 🔥 Destroy session AFTER DB update
+    // Destroy session AFTER DB update
     session.destroy();
 
-    // ✅ IMPORTANT: Use 303 redirect (safe for logout)
+    // IMPORTANT: Use 303 redirect (safe for logout)
     return NextResponse.redirect(
       new URL("/", process.env.AUTH0_BASE_URL || "http://localhost:3000"),
       { status: 303 }

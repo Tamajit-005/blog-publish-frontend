@@ -1,4 +1,3 @@
-//src/app/admin/blogs/[id]/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -34,6 +33,18 @@ interface Blog {
   status: string;
   createdAt: string;
   updatedAt: string;
+
+  // Pending edit fields
+  isEditPending?: boolean;
+  pendingEdit?: {
+    title: string;
+    slug: string;
+    content: string;
+    description?: string;
+    coverImage?: string;
+    inlineImages?: InlineImage[];
+    categories: string[];
+  };
 }
 
 const handleCopyCode = async (code: string) => {
@@ -82,7 +93,6 @@ export default function AdminBlogDetailPage() {
     fetchBlog();
   }, [blogId]);
 
-  // Process content to inject inline images
   const getProcessedContent = (currentBlog: Blog) => {
     let content = currentBlog.content || "";
 
@@ -90,8 +100,6 @@ export default function AdminBlogDetailPage() {
       currentBlog.inlineImages.forEach((img) => {
         if (img.placeholder && img.base64) {
           const cleanBase64 = img.base64.trim();
-
-          // Inject raw HTML for inline images
           content = content
             .split(img.placeholder)
             .join(
@@ -119,8 +127,23 @@ export default function AdminBlogDetailPage() {
     );
   }
 
-  // Generate content with images injected
-  const finalContent = getProcessedContent(blog);
+  // If a pending edit exists, show that content — admin is reviewing the changes
+  const displayBlog: Blog =
+    blog.isEditPending && blog.pendingEdit
+      ? {
+          ...blog,
+          title: blog.pendingEdit.title,
+          slug: blog.pendingEdit.slug,
+          content: blog.pendingEdit.content,
+          description: blog.pendingEdit.description,
+          coverImage: blog.pendingEdit.coverImage ?? blog.coverImage,
+          inlineImages: blog.pendingEdit.inlineImages ?? [],
+          categories: blog.pendingEdit.categories,
+        }
+      : blog;
+
+  // Use displayBlog for content rendering, blog for metadata (status, author, dates)
+  const finalContent = getProcessedContent(displayBlog);
 
   return (
     <motion.div
@@ -130,15 +153,17 @@ export default function AdminBlogDetailPage() {
       className="w-full min-h-screen bg-slate-950 text-gray-200"
     >
       <div className="max-w-3xl mx-auto p-6 pb-20">
+        {/* TITLE — from displayBlog */}
         <motion.h1
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
           className="text-4xl leading-[60px] text-center font-bold text-teal-400 capitalize"
         >
-          {blog.title}
+          {displayBlog.title}
         </motion.h1>
 
+        {/* DATE — from root blog */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -150,7 +175,7 @@ export default function AdminBlogDetailPage() {
             : ""}
         </motion.div>
 
-        {/* STATUS BADGE */}
+        {/* STATUS BADGE — from root blog */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -172,15 +197,29 @@ export default function AdminBlogDetailPage() {
           </span>
         </motion.div>
 
-        {/* CATEGORIES */}
-        {blog.categories && blog.categories.length > 0 && (
+        {/* PENDING EDIT BANNER */}
+        {blog.isEditPending && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.28 }}
+            className="mt-4 bg-blue-500/10 border border-blue-500/40 text-blue-300 px-4 py-3 rounded-lg text-sm text-center"
+          >
+            ✏️ <span className="font-semibold">Pending Edit Preview</span> — the
+            content below reflects the author's requested changes, not the
+            current live version.
+          </motion.div>
+        )}
+
+        {/* CATEGORIES — from displayBlog */}
+        {displayBlog.categories && displayBlog.categories.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
             className="flex flex-wrap space-x-2 my-4 justify-center"
           >
-            {blog.categories.map((name, index) => (
+            {displayBlog.categories.map((name, index) => (
               <span
                 key={index}
                 className="border border-teal-800 text-teal-300 px-2 py-1 text-sm rounded bg-teal-950/40 font-medium"
@@ -191,8 +230,8 @@ export default function AdminBlogDetailPage() {
           </motion.div>
         )}
 
-        {/* COVER IMAGE */}
-        {blog.coverImage && (
+        {/* COVER IMAGE — from displayBlog */}
+        {displayBlog.coverImage && (
           <motion.div
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -200,22 +239,22 @@ export default function AdminBlogDetailPage() {
             className="relative h-72 w-full my-6"
           >
             <img
-              src={blog.coverImage}
-              alt={blog.title}
+              src={displayBlog.coverImage}
+              alt={displayBlog.title}
               className="rounded-lg w-full h-full object-cover"
             />
           </motion.div>
         )}
 
-        {/* DESCRIPTION */}
-        {blog.description && (
+        {/* DESCRIPTION — from displayBlog */}
+        {displayBlog.description && (
           <motion.p
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
             className="text-gray-400 leading-8 tracking-wide italic mt-2 mb-6 text-center"
           >
-            {blog.description}
+            {displayBlog.description}
           </motion.p>
         )}
 
@@ -229,10 +268,8 @@ export default function AdminBlogDetailPage() {
           <Markdown
             remarkPlugins={[remarkGfm, remarkBreaks]}
             rehypePlugins={[rehypeRaw]}
-            // Allows data:image URLs to be rendered
             urlTransform={(value) => value}
             components={{
-              /* HEADINGS */
               h1: ({ children }) => (
                 <h1 className="text-3xl font-bold text-teal-400 mt-10 mb-4 border-b border-teal-800 pb-2">
                   {children}
@@ -253,12 +290,9 @@ export default function AdminBlogDetailPage() {
                   {children}
                 </h4>
               ),
-
-              /* TEXT */
               p: ({ children }) => (
                 <p className="text-gray-300 leading-relaxed my-3">{children}</p>
               ),
-
               ul: ({ children }) => (
                 <ul className="list-disc list-inside my-4 pl-2 text-gray-300 space-y-1">
                   {children}
@@ -270,37 +304,27 @@ export default function AdminBlogDetailPage() {
                 </ol>
               ),
               li: ({ children }) => <li className="ml-2">{children}</li>,
-
               blockquote: ({ children }) => (
                 <blockquote className="border-l-4 border-teal-500 pl-4 ml-2 italic text-gray-400 my-4">
                   {children}
                 </blockquote>
               ),
-
-              /* FORMATTING */
               u: ({ children }) => (
                 <u className="underline decoration-teal-500">{children}</u>
               ),
-
-              /* CODE BLOCK CONTAINER */
-              pre: ({ children }) => {
-                return (
-                  <pre
-                    className="bg-slate-900 border border-slate-800 rounded-lg p-4 my-4 overflow-x-auto cursor-pointer relative group"
-                    onClick={(e) => {
-                      const text = e.currentTarget.innerText;
-                      handleCopyCode(text);
-                    }}
-                  >
-                    {children}
-                  </pre>
-                );
-              },
-
-              /* CODE TEXT */
+              pre: ({ children }) => (
+                <pre
+                  className="bg-slate-900 border border-slate-800 rounded-lg p-4 my-4 overflow-x-auto cursor-pointer relative group"
+                  onClick={(e) => {
+                    const text = e.currentTarget.innerText;
+                    handleCopyCode(text);
+                  }}
+                >
+                  {children}
+                </pre>
+              ),
               code: ({ children, className }) => {
                 const isInline = !className;
-
                 if (isInline) {
                   return (
                     <code className="text-teal-300 px-1.5 py-0.5 rounded text-sm">
@@ -308,18 +332,14 @@ export default function AdminBlogDetailPage() {
                     </code>
                   );
                 }
-
                 return (
                   <code className="text-teal-300 text-sm block whitespace-pre">
                     {children}
                   </code>
                 );
               },
-
-              /* IMAGES */
               img: ({ src, alt, className }) => {
                 if (!src) return null;
-
                 return (
                   <img
                     src={src as string}

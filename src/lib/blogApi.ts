@@ -1,4 +1,3 @@
-// src/lib/blogApi.ts
 import { STRAPI_URL } from "@/lib/env";
 import { getAuthData } from "@/lib/authStore";
 
@@ -47,12 +46,12 @@ export async function createBlog({
     coverId = await uploadImage(coverFile);
   }
 
-  // 🚨 FIXED: Correct endpoint
+  // FIXED: Correct endpoint
   const res = await fetch(`${STRAPI_URL}/api/blogs`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${auth.jwt}`, // 🚨 Mandatory
+      Authorization: `Bearer ${auth.jwt}`, // JWT token for authentication
     },
     body: JSON.stringify({
       data: {
@@ -61,9 +60,7 @@ export async function createBlog({
         content,
         slug: title.toLowerCase().replace(/\s+/g, "-"),
 
-        // 🚨 REMOVED: author assignment (handled by backend controller)
-        // writer is injected by Strapi create controller
-
+        // Only include cover and category if they exist
         cover: coverId || undefined,
         category: categoryIds || undefined,
       },
