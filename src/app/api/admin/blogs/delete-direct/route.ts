@@ -9,6 +9,7 @@ const STRAPI_URL = process.env.STRAPI_URL!.replace(/\/$/, "");
 
 /* LOGIN OR REGISTER USER IN STRAPI */
 async function loginOrRegister(user: any): Promise<{ jwt: string }> {
+
   let password = user.strapi?.password;
 
   if (!password) {
@@ -17,8 +18,11 @@ async function loginOrRegister(user: any): Promise<{ jwt: string }> {
 
   let res = await fetch(`${STRAPI_URL}/api/auth/local`, {
     method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({identifier: user.email, password})
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      identifier: user.email,
+      password
+    })
   });
 
   if (res.ok) {
@@ -31,7 +35,7 @@ async function loginOrRegister(user: any): Promise<{ jwt: string }> {
 
   res = await fetch(`${STRAPI_URL}/api/auth/local/register`, {
     method: "POST",
-    headers: {"Content-Type": "application/json"},
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       email: user.email,
       username: user.username,
@@ -56,6 +60,7 @@ async function loginOrRegister(user: any): Promise<{ jwt: string }> {
 }
 
 export async function DELETE(req: NextRequest) {
+
   try {
 
     const auth = await checkAdminAuth();
@@ -100,13 +105,11 @@ export async function DELETE(req: NextRequest) {
     const { jwt } = await loginOrRegister(user);
 
     /* ===============================
-       DELETE FROM STRAPI
+       FIND BLOG IN STRAPI
        =============================== */
 
-    console.log("Searching Strapi blog with slug:", blog.slug);
-
     const findRes = await fetch(
-      `${STRAPI_URL}/api/blogs?filters[slug][$eq]=${blog.slug}&publicationState=preview`,
+      `${STRAPI_URL}/api/blogs?filters[slug][$eq]=${blog.slug}&publicationState=preview&populate=*`,
       {
         headers: {
           Authorization: `Bearer ${jwt}`
@@ -129,6 +132,10 @@ export async function DELETE(req: NextRequest) {
 
       const documentId = entry.documentId;
       const numericId = entry.id;
+
+      const coverImageId =
+        entry.cover?.id ||
+        entry.attributes?.cover?.data?.id;
 
       console.log("Deleting Strapi blog:", documentId || numericId);
 
@@ -164,9 +171,70 @@ export async function DELETE(req: NextRequest) {
       }
 
       console.log("Strapi blog deleted");
-    }
-    else {
-      console.log("Blog not found in Strapi, skipping");
+
+      /* ===============================
+         DELETE COVER IMAGE
+         =============================== */
+
+      if (coverImageId) {
+
+        console.log("Deleting cover image:", coverImageId);
+
+        await fetch(
+          `${STRAPI_URL}/api/upload/files/${coverImageId}`,
+          {
+            method: "DELETE",
+            headers: {
+              Authorization: `Bearer ${jwt}`
+            }
+          }
+        );
+      }
+
+      /* ===============================
+         DELETE INLINE IMAGES
+         =============================== */
+
+      if (blog.inlineImages && Array.isArray(blog.inlineImages)) {
+
+        for (const img of blog.inlineImages) {
+
+          const search = await fetch(
+            `${STRAPI_URL}/api/upload/files?filters[name][$contains]=${img.id}`,
+            {
+              headers: {
+                Authorization: `Bearer ${jwt}`
+              }
+            }
+          );
+
+          if (!search.ok) continue;
+
+          const files = await search.json();
+
+          if (files.length > 0) {
+
+            const fileId = files[0].id;
+
+            console.log("Deleting inline image:", fileId);
+
+            await fetch(
+              `${STRAPI_URL}/api/upload/files/${fileId}`,
+              {
+                method: "DELETE",
+                headers: {
+                  Authorization: `Bearer ${jwt}`
+                }
+              }
+            );
+          }
+        }
+      }
+
+    } else {
+
+      console.log("Blog not found in Strapi, skipping media delete");
+
     }
 
     /* ===============================
@@ -176,11 +244,10 @@ export async function DELETE(req: NextRequest) {
     await Blog.findByIdAndDelete(blogId);
 
     return NextResponse.json({
-      message: "Blog deleted from Strapi and MongoDB"
+      message: "Blog and media deleted from Strapi and MongoDB"
     });
 
-  }
-  catch (error:any) {
+  } catch (error: any) {
 
     console.error("Delete direct error:", error);
 
