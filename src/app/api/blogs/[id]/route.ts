@@ -72,6 +72,7 @@ export async function DELETE(
 
     if (blog.status === "published" || blog.status === "approved") {
       blog.deletionRequested = true;
+      blog.deletionRequestedAt = new Date(); // stamp the request time
       // Clear any previous rejection state when user re-requests deletion
       blog.isDeletionRejected = false;
       blog.deletionRejectedNotes = undefined;
@@ -80,6 +81,7 @@ export async function DELETE(
       return NextResponse.json({
         message: "Deletion requested successfully. Waiting for admin approval.",
         action: "requested",
+        deletionRequestedAt: blog.deletionRequestedAt,
       });
     }
 

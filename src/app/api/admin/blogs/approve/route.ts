@@ -312,6 +312,10 @@ export async function POST(req: NextRequest) {
     blog.status = "published";
     blog.strapiId = created.data.id;
     blog.publishedAt = new Date();
+    blog.adminNotes = undefined;
+    blog.rejectedAt = undefined;
+    blog.content = content;
+    blog.inlineImages = []; // Clear base64 inline images after upload to Strapi
     await blog.save();
 
     return NextResponse.json({

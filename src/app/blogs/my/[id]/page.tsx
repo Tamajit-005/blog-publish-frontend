@@ -36,8 +36,13 @@ interface Blog {
   createdAt: string;
   updatedAt: string;
 
-  // Pending edit fields
+  // Deletion rejection fields
+  isDeletionRejected?: boolean;
+  deletionRejectedNotes?: string;
+
+  // Edit rejection/pending fields
   isEditPending?: boolean;
+  isEditRejected?: boolean;
   pendingEdit?: {
     title: string;
     slug: string;
@@ -75,6 +80,9 @@ export default function MyBlogDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Keep original mongo blog separately to access rejection fields
+  const [mongoBlog, setMongoBlog] = useState<Blog | null>(null);
+
   useEffect(() => {
     if (!blogId) return;
 
@@ -87,34 +95,36 @@ export default function MyBlogDetailPage() {
         }
 
         const data = await res.json();
-        const mongoBlog: Blog = data.blog;
+        const fetched: Blog = data.blog;
 
-        if (mongoBlog.status === "published") {
+        setMongoBlog(fetched);
+
+        if (fetched.status === "published") {
           // If a pending edit exists, show the edited version for preview
-          if (mongoBlog.isEditPending && mongoBlog.pendingEdit) {
+          if (fetched.isEditPending && fetched.pendingEdit) {
             setBlog({
-              ...mongoBlog,
-              title: mongoBlog.pendingEdit.title,
-              slug: mongoBlog.pendingEdit.slug,
-              content: mongoBlog.pendingEdit.content,
-              description: mongoBlog.pendingEdit.description,
-              coverImage:
-                mongoBlog.pendingEdit.coverImage ?? mongoBlog.coverImage,
-              inlineImages: mongoBlog.pendingEdit.inlineImages ?? [],
-              categories: mongoBlog.pendingEdit.categories,
+              ...fetched,
+              title: fetched.pendingEdit.title,
+              slug: fetched.pendingEdit.slug,
+              content: fetched.pendingEdit.content,
+              description: fetched.pendingEdit.description,
+              coverImage: fetched.pendingEdit.coverImage ?? fetched.coverImage,
+              inlineImages: fetched.pendingEdit.inlineImages ?? [],
+              categories: fetched.pendingEdit.categories,
             });
           } else {
             // No pending edit — fetch live Strapi version
-            const sres = await fetch(`/api/blogs/strapi/${mongoBlog.slug}`);
+            const sres = await fetch(`/api/blogs/strapi/${fetched.slug}`);
             if (!sres.ok) {
-              setBlog(mongoBlog);
+              setBlog(fetched);
             } else {
               const sdata = await sres.json();
-              setBlog({ ...sdata.blog, status: "published" });
+              // Merge Strapi content with mongo metadata for rejection fields
+              setBlog({ ...fetched, ...sdata.blog, status: "published" });
             }
           }
         } else {
-          setBlog(mongoBlog);
+          setBlog(fetched);
         }
       } catch (err: any) {
         setError(err.message || "Failed to fetch blog");
@@ -161,6 +171,9 @@ export default function MyBlogDetailPage() {
   }
 
   const finalContent = getProcessedContent(blog);
+
+  // Use mongoBlog for rejection fields since Strapi merge may overwrite them
+  const source = mongoBlog ?? blog;
 
   return (
     <motion.div
@@ -213,7 +226,7 @@ export default function MyBlogDetailPage() {
         </motion.div>
 
         {/* PENDING EDIT BANNER */}
-        {blog.isEditPending && blog.status === "published" && (
+        {source.isEditPending && blog.status === "published" && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -225,8 +238,8 @@ export default function MyBlogDetailPage() {
           </motion.div>
         )}
 
-        {/* ADMIN NOTES */}
-        {blog.status === "rejected" && blog.adminNotes && (
+        {/* BLOG REJECTION REASON */}
+        {blog.status === "rejected" && source.adminNotes && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -234,7 +247,33 @@ export default function MyBlogDetailPage() {
             className="mt-4 bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-lg text-sm text-center"
           >
             <span className="font-semibold">Rejection reason:</span>{" "}
-            {blog.adminNotes}
+            {source.adminNotes}
+          </motion.div>
+        )}
+
+        {/* EDIT REJECTION REASON */}
+        {source.isEditRejected && source.adminNotes && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="mt-4 bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-lg text-sm text-center"
+          >
+            <span className="font-semibold">Edit rejected:</span>{" "}
+            {source.adminNotes}
+          </motion.div>
+        )}
+
+        {/* DELETION REJECTION REASON */}
+        {source.isDeletionRejected && source.deletionRejectedNotes && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="mt-4 bg-orange-500/10 border border-orange-500/30 text-orange-400 px-4 py-3 rounded-lg text-sm text-center"
+          >
+            <span className="font-semibold">Deletion rejected:</span>{" "}
+            {source.deletionRejectedNotes}
           </motion.div>
         )}
 
