@@ -202,7 +202,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: any) {
     console.error("❌ Blog creation error:", error);
-    console.error("❌ Error stack:", error.stack);
     return NextResponse.json(
       { error: "Failed to create blog" },
       { status: 500 }

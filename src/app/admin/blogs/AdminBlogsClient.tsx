@@ -18,35 +18,47 @@ interface Blog {
   status: string;
   createdAt: string;
   deletionRequested?: boolean;
+  isEditPending?: boolean;
+
+  // Pending edit fields (if isEditPending is true)
+  pendingEdit?: {
+    title: string;
+    description?: string;
+    coverImage?: string;
+    categories: string[];
+  };
 }
+
+const tabs = [
+  { id: "pending" as const, label: "Pending", activeColor: "bg-teal-600" },
+  { id: "deletion" as const, label: "Deletion", activeColor: "bg-red-600" },
+  { id: "edits" as const, label: "Edit Requests", activeColor: "bg-blue-600" },
+];
 
 export default function AdminBlogsClient() {
   const router = useRouter();
+
   const [blogs, setBlogs] = useState<Blog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState<"pending" | "deletion">("pending");
+  const [activeTab, setActiveTab] = useState<"pending" | "deletion" | "edits">(
+    "pending",
+  );
 
   useEffect(() => {
-    if (activeTab === "pending") {
-      fetchPendingBlogs();
-    } else {
-      fetchDeletionRequests();
-    }
+    if (activeTab === "pending") fetchPendingBlogs();
+    else if (activeTab === "deletion") fetchDeletionRequests();
+    else fetchEditRequests();
   }, [activeTab]);
 
   async function fetchPendingBlogs() {
     setLoading(true);
     try {
       const res = await fetch("/api/admin/blogs/pending");
-      if (res.ok) {
-        const data = await res.json();
-        setBlogs(data.blogs || []);
-      } else {
-        setError("Failed to fetch pending blogs");
-      }
+      const data = await res.json();
+      setBlogs(data.blogs || []);
     } catch (err) {
-      setError("Failed to fetch blogs");
+      setError("Failed to fetch pending blogs");
     } finally {
       setLoading(false);
     }
@@ -56,14 +68,23 @@ export default function AdminBlogsClient() {
     setLoading(true);
     try {
       const res = await fetch("/api/admin/blogs/delete-requests");
-      if (res.ok) {
-        const data = await res.json();
-        setBlogs(data.blogs || []);
-      } else {
-        setError("Failed to fetch deletion requests");
-      }
+      const data = await res.json();
+      setBlogs(data.blogs || []);
     } catch (err) {
-      setError("Failed to fetch requests");
+      setError("Failed to fetch deletion requests");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function fetchEditRequests() {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/admin/blogs/edit-requests");
+      const data = await res.json();
+      setBlogs(data.blogs || []);
+    } catch (err) {
+      setError("Failed to fetch edit requests");
     } finally {
       setLoading(false);
     }
@@ -71,25 +92,15 @@ export default function AdminBlogsClient() {
 
   async function handleApprove(e: React.MouseEvent, blogId: string) {
     e.stopPropagation();
-    if (!confirm("Are you sure you want to approve and publish this blog?"))
-      return;
-
-    try {
-      const res = await fetch("/api/admin/blogs/approve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ blogId }),
-      });
-
-      if (res.ok) {
-        alert("✅ Blog approved and published to Strapi!");
-        fetchPendingBlogs();
-      } else {
-        const data = await res.json();
-        alert(`❌ ${data.error}`);
-      }
-    } catch (err) {
-      alert("Failed to approve blog");
+    if (!confirm("Approve and publish this blog?")) return;
+    const res = await fetch("/api/admin/blogs/approve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ blogId }),
+    });
+    if (res.ok) {
+      alert("✅ Blog approved and published");
+      fetchPendingBlogs();
     }
   }
 
@@ -97,59 +108,77 @@ export default function AdminBlogsClient() {
     e.stopPropagation();
     const reason = prompt("Reason for rejection:");
     if (!reason) return;
-
-    try {
-      const res = await fetch("/api/admin/blogs/reject", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ blogId, adminNotes: reason }),
-      });
-
-      if (res.ok) {
-        alert("✅ Blog rejected");
-        fetchPendingBlogs();
-      } else {
-        const data = await res.json();
-        alert(`❌ ${data.error}`);
-      }
-    } catch (err) {
-      alert("Failed to reject blog");
+    const res = await fetch("/api/admin/blogs/reject", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ blogId, adminNotes: reason }),
+    });
+    if (res.ok) {
+      alert("✅ Blog rejected");
+      fetchPendingBlogs();
     }
   }
 
   async function handleApproveDelete(e: React.MouseEvent, blogId: string) {
     e.stopPropagation();
-    if (
-      !confirm(
-        "Are you sure? This will permanently delete the blog from Strapi and Database.",
-      )
-    )
-      return;
-
-    try {
-      const res = await fetch("/api/admin/blogs/approve-delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ blogId }),
-      });
-
-      if (res.ok) {
-        alert("✅ Blog permanently deleted");
-        fetchDeletionRequests();
-      } else {
-        const data = await res.json();
-        alert(`❌ ${data.error}`);
-      }
-    } catch (err) {
-      alert("Failed to delete blog");
+    if (!confirm("This will permanently delete the blog. Continue?")) return;
+    const res = await fetch("/api/admin/blogs/approve-delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ blogId }),
+    });
+    if (res.ok) {
+      alert("✅ Blog permanently deleted");
+      fetchDeletionRequests();
     }
   }
 
+  // Rejection of deletion request simply clears the deletionRequested flag and sets isDeletionRejected to true, along with admin notes for reason
   async function handleRejectDelete(e: React.MouseEvent, blogId: string) {
     e.stopPropagation();
-    alert(
-      "Functionality to reject deletion request (keep blog live) can be implemented here by setting deletionRequested to false.",
-    );
+    const reason = prompt("Reason for rejecting this deletion request:");
+    if (!reason) return;
+    const res = await fetch("/api/admin/blogs/reject-delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ blogId, reason }),
+    });
+    if (res.ok) {
+      alert("✅ Deletion request rejected");
+      fetchDeletionRequests();
+    } else {
+      const data = await res.json();
+      alert(`❌ ${data.error || "Failed to reject deletion"}`);
+    }
+  }
+
+  async function handleApproveEdit(e: React.MouseEvent, blogId: string) {
+    e.stopPropagation();
+    if (!confirm("Approve these edits and push to live site?")) return;
+    const res = await fetch("/api/admin/blogs/approve-edit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ blogId }),
+    });
+    if (res.ok) {
+      alert("✅ Edit approved!");
+      fetchEditRequests();
+    }
+  }
+
+  async function handleRejectEdit(e: React.MouseEvent, blogId: string) {
+    e.stopPropagation();
+    const reason = prompt("Reason for rejection:");
+    if (!reason) return;
+    const res = await fetch("/api/admin/blogs/reject-edit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ blogId, adminNotes: reason }),
+    });
+    if (res.ok) {
+      alert("✅ Edit rejected!");
+      fetchEditRequests();
+    }
   }
 
   return (
@@ -163,198 +192,208 @@ export default function AdminBlogsClient() {
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-4xl font-bold text-teal-400">Admin Dashboard</h1>
 
-          {/* TABS */}
-          <div className="flex space-x-2 bg-gray-900 p-1 rounded-lg">
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setActiveTab("pending")}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition ${
-                activeTab === "pending"
-                  ? "bg-teal-600 text-white shadow-md"
-                  : "text-gray-400 hover:text-white"
-              }`}
-            >
-              Pending Approvals
-            </motion.button>
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setActiveTab("deletion")}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition ${
-                activeTab === "deletion"
-                  ? "bg-red-600 text-white shadow-md"
-                  : "text-gray-400 hover:text-white"
-              }`}
-            >
-              Deletion Requests
-            </motion.button>
+          {/* TABS WITH SLIDING PILL */}
+          <div className="flex space-x-1 bg-gray-900 p-1 rounded-lg relative">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className="relative px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 z-10"
+                style={{
+                  color: activeTab === tab.id ? "white" : "rgb(156 163 175)",
+                }}
+              >
+                {activeTab === tab.id && (
+                  <motion.span
+                    layoutId="activeTabPill"
+                    className={`absolute inset-0 rounded-md ${tab.activeColor}`}
+                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                  />
+                )}
+                <span className="relative z-10">{tab.label}</span>
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* CONTENT AREA */}
+        {/* CONTENT */}
         <AnimatePresence mode="wait">
-          {loading ? (
-            <motion.div
-              key="loading"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="flex items-center justify-center h-64 text-teal-400"
-            >
-              Loading...
-            </motion.div>
-          ) : blogs.length === 0 ? (
-            <motion.p
-              key="empty"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="text-gray-400 text-center mt-20 text-lg"
-            >
-              {activeTab === "pending"
-                ? "No pending blogs."
-                : "No deletion requests."}
-            </motion.p>
-          ) : (
-            <motion.div key="list" className="space-y-6">
-              {blogs.map((blog, index) => (
-                <motion.div
-                  key={blog._id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, delay: index * 0.1 }} // Staggered entry
-                  whileHover={{ scale: 1.015 }} // Smooth scaling on hover
-                  onClick={() => router.push(`/admin/blogs/${blog._id}`)}
-                  className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden hover:border-teal-500 transition-colors cursor-pointer shadow-lg"
-                >
-                  <div className="flex flex-col md:flex-row gap-6">
-                    {/* COVER IMAGE */}
-                    <div className="md:w-80 w-full h-64 md:h-auto flex-shrink-0">
-                      {blog.coverImage ? (
-                        <img
-                          src={blog.coverImage}
-                          alt={blog.title}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
-                          <svg
-                            className="w-20 h-20 text-gray-700"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+          <motion.div
+            key={`${activeTab}-${loading}`}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+          >
+            {loading ? (
+              <div className="text-center mt-20 text-teal-400">Loading...</div>
+            ) : blogs.length === 0 ? (
+              <p className="text-center text-gray-400 mt-20">No blogs found.</p>
+            ) : (
+              <div className="space-y-6">
+                {blogs.map((blog) => {
+                  const displayTitle =
+                    activeTab === "edits" && blog.pendingEdit?.title
+                      ? blog.pendingEdit.title
+                      : blog.title;
+
+                  const displayDescription =
+                    activeTab === "edits" && blog.pendingEdit?.description
+                      ? blog.pendingEdit.description
+                      : blog.description;
+
+                  const displayCoverImage =
+                    activeTab === "edits" && blog.pendingEdit != null
+                      ? blog.pendingEdit.coverImage
+                      : blog.coverImage;
+
+                  const displayCategories =
+                    activeTab === "edits" && blog.pendingEdit?.categories
+                      ? blog.pendingEdit.categories
+                      : blog.categories;
+
+                  return (
+                    <motion.div
+                      key={blog._id}
+                      whileHover={{ scale: 1.02 }}
+                      onClick={() => router.push(`/admin/blogs/${blog._id}`)}
+                      className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden cursor-pointer hover:border-teal-500 transition-colors"
+                    >
+                      <div className="flex flex-col md:flex-row">
+                        {/* COVER IMAGE */}
+                        <div className="md:w-80 h-64 flex-shrink-0">
+                          {displayCoverImage ? (
+                            <img
+                              src={displayCoverImage}
+                              className="w-full h-full object-cover"
+                              alt={displayTitle}
                             />
-                          </svg>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* CONTENT */}
-                    <div className="flex-1 p-6">
-                      <div className="flex justify-between items-start">
-                        <h2 className="text-2xl font-semibold text-white mb-2">
-                          {blog.title}
-                        </h2>
-                        {activeTab === "deletion" && (
-                          <span className="bg-red-500/20 text-red-400 text-xs px-2 py-1 rounded border border-red-500/50">
-                            Deletion Requested
-                          </span>
-                        )}
-                      </div>
-
-                      <p className="text-gray-400 mb-4 line-clamp-2">
-                        {blog.description || "No description"}
-                      </p>
-
-                      <div className="flex flex-wrap gap-4 text-sm text-gray-500 mb-3">
-                        <span>
-                          By:{" "}
-                          <strong className="text-teal-400">
-                            {blog.author.username}
-                          </strong>
-                        </span>
-                        <span>
-                          Slug: <strong>{blog.slug}</strong>
-                        </span>
-                        <span>
-                          {new Date(blog.createdAt).toLocaleDateString(
-                            "en-IN",
-                            {
-                              day: "2-digit",
-                              month: "short",
-                              year: "numeric",
-                            },
+                          ) : (
+                            <div className="w-full h-full bg-gray-800 flex items-center justify-center text-gray-600 text-sm">
+                              No Image
+                            </div>
                           )}
-                        </span>
-                      </div>
+                        </div>
 
-                      {/* CATEGORIES */}
-                      <div className="flex flex-wrap gap-2 mb-4">
-                        {blog.categories && blog.categories.length > 0 ? (
-                          blog.categories.map((cat, catIndex) => (
-                            <span
-                              key={catIndex}
-                              className="text-xs px-3 py-1 bg-teal-500/20 text-teal-400 border border-teal-500 rounded-full"
-                            >
-                              {cat}
+                        <div className="p-6 flex-1">
+                          {/* TITLE */}
+                          <div className="flex items-start justify-between mb-2">
+                            <h2 className="text-xl font-semibold">
+                              {displayTitle}
+                            </h2>
+
+                            {activeTab === "edits" && (
+                              <span className="ml-3 text-xs px-2 py-1 bg-blue-500/20 text-blue-400 border border-blue-500/50 rounded flex-shrink-0">
+                                Edit Pending
+                              </span>
+                            )}
+                          </div>
+
+                          {/* DESCRIPTION */}
+                          <p className="text-gray-400 mb-3 line-clamp-2">
+                            {displayDescription || "No description."}
+                          </p>
+
+                          {/* CATEGORIES */}
+                          <div className="flex gap-2 flex-wrap mb-4">
+                            {displayCategories.map((cat) => (
+                              <span
+                                key={cat}
+                                className="text-xs px-2 py-1 bg-teal-500/20 text-teal-400 border border-teal-500 rounded"
+                              >
+                                {cat}
+                              </span>
+                            ))}
+                          </div>
+
+                          {/* AUTHOR & DATE */}
+                          <div className="flex gap-4 text-sm text-gray-500 mb-4">
+                            <span>
+                              By:{" "}
+                              <strong className="text-teal-400">
+                                {blog.author.username}
+                              </strong>
                             </span>
-                          ))
-                        ) : (
-                          <span className="text-xs text-gray-500">
-                            No categories
-                          </span>
-                        )}
-                      </div>
+                            <span>
+                              {new Date(blog.createdAt).toLocaleDateString(
+                                "en-IN",
+                                {
+                                  day: "2-digit",
+                                  month: "short",
+                                  year: "numeric",
+                                },
+                              )}
+                            </span>
+                          </div>
 
-                      {/* ACTIONS */}
-                      <div className="flex flex-wrap gap-3">
-                        {activeTab === "pending" ? (
-                          <>
-                            <motion.button
-                              whileTap={{ scale: 0.95 }}
-                              onClick={(e) => handleApprove(e, blog._id)}
-                              className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded transition"
-                            >
-                              Approve & Publish
-                            </motion.button>
-                            <motion.button
-                              whileTap={{ scale: 0.95 }}
-                              onClick={(e) => handleReject(e, blog._id)}
-                              className="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded transition"
-                            >
-                              Reject
-                            </motion.button>
-                          </>
-                        ) : (
-                          <>
-                            <motion.button
-                              whileTap={{ scale: 0.95 }}
-                              onClick={(e) => handleApproveDelete(e, blog._id)}
-                              className="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded transition"
-                            >
-                              Approve Deletion
-                            </motion.button>
-                            {/* <motion.button
-                              whileTap={{ scale: 0.95 }}
-                              onClick={(e) => handleRejectDelete(e, blog._id)}
-                              className="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded transition"
-                            >
-                              Reject Request
-                            </motion.button> */}
-                          </>
-                        )}
+                          {/* ACTION BUTTONS */}
+                          <div className="flex gap-3">
+                            {activeTab === "pending" && (
+                              <>
+                                <button
+                                  onClick={(e) => handleApprove(e, blog._id)}
+                                  className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded transition"
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  onClick={(e) => handleReject(e, blog._id)}
+                                  className="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded transition"
+                                >
+                                  Reject
+                                </button>
+                              </>
+                            )}
+
+                            {/* Both approve and reject deletion buttons */}
+                            {activeTab === "deletion" && (
+                              <>
+                                <button
+                                  onClick={(e) =>
+                                    handleApproveDelete(e, blog._id)
+                                  }
+                                  className="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded transition"
+                                >
+                                  Approve Deletion
+                                </button>
+                                <button
+                                  onClick={(e) =>
+                                    handleRejectDelete(e, blog._id)
+                                  }
+                                  className="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded transition"
+                                >
+                                  Reject Deletion
+                                </button>
+                              </>
+                            )}
+
+                            {activeTab === "edits" && (
+                              <>
+                                <button
+                                  onClick={(e) =>
+                                    handleApproveEdit(e, blog._id)
+                                  }
+                                  className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded transition"
+                                >
+                                  Approve Edit
+                                </button>
+                                <button
+                                  onClick={(e) => handleRejectEdit(e, blog._id)}
+                                  className="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded transition"
+                                >
+                                  Reject Edit
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </motion.div>
-          )}
+                    </motion.div>
+                  );
+                })}
+              </div>
+            )}
+          </motion.div>
         </AnimatePresence>
       </div>
     </motion.div>
