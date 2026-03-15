@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import { FaSearch, FaTimes, FaBars } from "react-icons/fa";
 
 const Navbar = () => {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -18,7 +19,6 @@ const Navbar = () => {
   const router = useRouter();
   const profileRef = useRef<HTMLDivElement | null>(null);
 
-  // Fetches user session data on mount
   useEffect(() => {
     fetch("/api/user/username")
       .then((res) => {
@@ -36,12 +36,10 @@ const Navbar = () => {
       .finally(() => setIsLoading(false));
   }, []);
 
-  // Handles user logout
   const handleLogout = () => {
     window.location.href = "/api/auth/custom-logout";
   };
 
-  // Requests a password reset link
   const handleChangePassword = async () => {
     await fetch("/api/auth/reset-password", { method: "POST" });
     setToast("Password reset link sent to your email");
@@ -49,7 +47,6 @@ const Navbar = () => {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // Closes the profile dropdown when clicking outside of it
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (
@@ -64,12 +61,10 @@ const Navbar = () => {
     return () => document.removeEventListener("mousedown", handler);
   }, [profileOpen]);
 
-  // Disables background scrolling when modals are open
   useEffect(() => {
     document.body.style.overflow = menuOpen || searchOpen ? "hidden" : "";
   }, [menuOpen, searchOpen]);
 
-  // Submits the search query
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const q = searchQuery.trim();
@@ -78,7 +73,6 @@ const Navbar = () => {
     setMenuOpen(false);
   };
 
-  // Generates user initials for the avatar
   const getInitials = (name: string | undefined | null) => {
     if (!name) return "U";
     const parts = name.split(" ");
@@ -92,7 +86,6 @@ const Navbar = () => {
     <header className="bg-[#0f111a] text-white sticky top-0 z-50 shadow-md">
       <div className="max-w-6xl mx-auto flex items-center justify-between p-4">
 
-        {/* Logo */}
         <Link href="/">
           <img src="/images/Logo.png" alt="Logo" className="h-12 w-auto" />
         </Link>
@@ -153,15 +146,16 @@ const Navbar = () => {
                             Your Posts
                           </Link>
 
-                          {user?.role && ["admin", "superadmin"].includes(user.role) && (
-                            <Link
-                              href="/admin/blogs"
-                              onClick={() => setProfileOpen(false)}
-                              className="block px-4 py-2 text-white hover:bg-yellow-700 transition"
-                            >
-                              Pending Blogs
-                            </Link>
-                          )}
+                          {user?.role &&
+                            ["admin", "superadmin"].includes(user.role) && (
+                              <Link
+                                href="/admin/blogs"
+                                onClick={() => setProfileOpen(false)}
+                                className="block px-4 py-2 text-white hover:bg-yellow-700 transition"
+                              >
+                                Pending Blogs
+                              </Link>
+                            )}
 
                           <button
                             onClick={handleChangePassword}
@@ -189,6 +183,7 @@ const Navbar = () => {
                   >
                     Login
                   </Link>
+
                   <Link
                     href="/signup"
                     className="bg-teal-600 hover:bg-teal-500 px-4 py-2 rounded-md text-sm font-semibold text-white transition"
