@@ -112,10 +112,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-<<<<<<< HEAD
-    // ✅ Validate categories
-=======
->>>>>>> e94fc34f19737e6b857011095e05633fdff7edc1
     if (!Array.isArray(categories) || categories.length === 0 || categories.length > 3) {
       return NextResponse.json(
         { error: "Please select 1-3 categories" },
