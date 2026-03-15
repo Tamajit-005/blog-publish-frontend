@@ -3,12 +3,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FaSearch, FaTimes, FaBars } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 
 const Navbar = () => {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [username, setUsername] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
@@ -26,7 +23,7 @@ const Navbar = () => {
       })
       .then((data) => {
         setUsername(data.username);
-        setUser(data); // contains role
+        setUser(data);
       })
       .catch(() => {
         setUsername(null);
@@ -46,7 +43,7 @@ const Navbar = () => {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // Close dropdown on outside click
+  // Close dropdown when clicking outside
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (
@@ -67,17 +64,21 @@ const Navbar = () => {
   return (
     <header className="bg-[#0f111a] text-white sticky top-0 z-50 shadow-md">
       <div className="max-w-6xl mx-auto flex items-center justify-between p-4">
+
+        {/* Logo */}
         <Link href="/">
           <img src="/images/Logo.png" alt="Logo" className="h-12" />
         </Link>
 
         <nav className="hidden md:flex items-center gap-6 font-medium">
+
           <Link href="/blogs" className="hover:text-teal-400">
             Blogs
           </Link>
 
           {!isLoading && user && (
             <>
+              {/* Create Blog */}
               <button
                 onClick={() => router.push("/create")}
                 className="bg-teal-600 hover:bg-teal-500 px-4 py-2 rounded-md text-sm font-semibold"
@@ -85,6 +86,7 @@ const Navbar = () => {
                 Create
               </button>
 
+              {/* Profile Dropdown */}
               <div className="relative" ref={profileRef}>
                 <button
                   onClick={() => setProfileOpen((p) => !p)}
@@ -100,8 +102,10 @@ const Navbar = () => {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -8 }}
                       transition={{ duration: 0.2 }}
-                      className="absolute right-0 mt-2 bg-[#1a1c29] w-48 rounded-lg shadow-lg border border-gray-700 text-sm z-50"
+                      className="absolute right-0 mt-2 bg-[#1a1c29] w-52 rounded-lg shadow-lg border border-gray-700 text-sm z-50"
                     >
+
+                      {/* Username */}
                       <div className="px-4 py-3 border-b border-gray-700 text-gray-300">
                         Logged in as
                         <br />
@@ -110,6 +114,7 @@ const Navbar = () => {
                         </span>
                       </div>
 
+                      {/* Your Posts */}
                       <Link
                         href="/blogs"
                         onClick={() => setProfileOpen(false)}
@@ -118,18 +123,19 @@ const Navbar = () => {
                         Your Posts
                       </Link>
 
-                      {/* ✅ Pending Blogs (Admin + Superadmin) */}
+                      {/* Admin Panel */}
                       {(user.role === "admin" ||
                         user.role === "superadmin") && (
                         <Link
                           href="/admin/blogs"
                           onClick={() => setProfileOpen(false)}
-                          className="block px-4 py-2 text-white hover:bg-yellow-700 transition"
+                          className="block px-4 py-2 hover:bg-yellow-700"
                         >
                           Pending Blogs
                         </Link>
                       )}
 
+                      {/* Change Password */}
                       <button
                         onClick={handleChangePassword}
                         className="block w-full text-left px-4 py-2 hover:bg-teal-900"
@@ -137,12 +143,14 @@ const Navbar = () => {
                         Change Password
                       </button>
 
+                      {/* Logout */}
                       <button
                         onClick={handleLogout}
                         className="block w-full text-left px-4 py-2 hover:bg-red-600 hover:text-white"
                       >
                         Logout
                       </button>
+
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -153,6 +161,7 @@ const Navbar = () => {
           {!isLoading && !user && (
             <>
               <Link href="/login">Login</Link>
+
               <Link
                 href="/signup"
                 className="bg-teal-600 hover:bg-teal-500 px-4 py-2 rounded-md text-sm font-semibold"
@@ -164,7 +173,7 @@ const Navbar = () => {
         </nav>
       </div>
 
-      {/* Center toast */}
+      {/* Toast */}
       <AnimatePresence>
         {toast && (
           <motion.div

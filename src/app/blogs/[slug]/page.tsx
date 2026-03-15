@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Markdown from "react-markdown";
@@ -10,37 +10,26 @@ import rehypeRaw from "rehype-raw";
 import moment from "moment";
 import { toast } from "react-hot-toast";
 
-// Type definitions for blog and inline images
-interface InlineImage {
-  id: string;
-  placeholder: string;
-  base64: string;
+interface Category {
+  documentId: string;
+  name: string;
 }
 
-interface Blog {
-  _id?: string;
+interface BlogPost {
   title: string;
   slug: string;
   content: string;
   description?: string;
-  coverImage?: string;
-  inlineImages?: InlineImage[];
-  categories: string[];
-  author: {
-    auth0Id?: string;
-    username: string;
-    email?: string;
-  };
-  status: string;
-  adminNotes?: string;
-  createdAt: string;
-  updatedAt: string;
+  cover?: { url: string };
+  category?: Category[];
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  author?: { name: string; email?: string };
+  writer?: { username: string; email?: string };
 }
 
-// Handles copying code blocks to clipboard
 const handleCopyCode = async (code: string) => {
   try {
-    if (!code) return;
     await navigator.clipboard.writeText(code);
     toast.success("Code copied!");
   } catch {
@@ -48,80 +37,64 @@ const handleCopyCode = async (code: string) => {
   }
 };
 
-// Main component for displaying a user's blog details
-export default function MyBlogDetailPage() {
+export default function PublishedBlogPage() {
   const router = useRouter();
   const params = useParams();
 
-  const blogId =
-    typeof params?.id === "string"
-      ? params.id
-      : Array.isArray(params?.id)
-        ? params.id[0]
-        : "";
+  const slug = useMemo(() => {
+    const raw = (params as Record<string, unknown>)?.slug;
+    return Array.isArray(raw) ? raw[0] : (raw as string);
+  }, [params]);
 
-  const [blog, setBlog] = useState<Blog | null>(null);
+  const [post, setPost] = useState<BlogPost | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  /* 1. FETCH BLOG */
   useEffect(() => {
-    if (!blogId) return;
+    if (!slug) return;
 
     const fetchBlog = async () => {
       try {
-        const res = await fetch(`/api/blogs/${blogId}`);
+        const res = await fetch(
+          `/api/blogs/strapi/${encodeURIComponent(slug)}`,
+        );
+        const data = await res.json();
+
         if (!res.ok) {
-          const data = await res.json();
           throw new Error(data.error || "Failed to fetch blog");
         }
 
-        const data = await res.json();
-        const mongoBlog: Blog = data.blog;
+        const fetched = data.blog ?? data;
 
-        if (mongoBlog.status === "published") {
-          const sres = await fetch(`/api/blogs/strapi/${mongoBlog.slug}`);
-          if (!sres.ok) {
-            setBlog(mongoBlog);
-          } else {
-            const sdata = await sres.json();
-            setBlog({ ...sdata.blog, status: "published" });
-          }
-        } else {
-          setBlog(mongoBlog);
-        }
+        setPost({
+          title: fetched.title,
+          slug: fetched.slug,
+          content: fetched.content,
+          description: fetched.description,
+          cover: fetched.coverImage ? { url: fetched.coverImage } : undefined,
+          category: Array.isArray(fetched.categories)
+            ? fetched.categories.map((cat: string) => ({
+                documentId: cat,
+                name: cat,
+              }))
+            : [],
+          createdAt: fetched.createdAt ?? fetched.publishedAt ?? null,
+          updatedAt: fetched.updatedAt ?? null,
+          author: {
+            name: fetched.author?.username ?? fetched.author?.name ?? "Author",
+            email: fetched.author?.email ?? null,
+          },
+        });
       } catch (err: any) {
-        setError(err.message || "Failed to fetch blog");
+        setError(err.message || "Blog not found");
       } finally {
         setLoading(false);
       }
     };
 
     fetchBlog();
-  }, [blogId]);
+  }, [slug]);
 
-  // Process content to inject inline images
-  const getProcessedContent = (currentBlog: Blog) => {
-    let content = currentBlog.content || "";
-
-    if (currentBlog.inlineImages && currentBlog.inlineImages.length > 0) {
-      currentBlog.inlineImages.forEach((img) => {
-        if (img.placeholder && img.base64) {
-          const cleanBase64 = img.base64.trim();
-
-          // Inject raw HTML for inline images
-          content = content
-            .split(img.placeholder)
-            .join(
-              `<img src="${cleanBase64}" alt="Inline Image" class="rounded-lg w-full my-4 object-cover" />`,
-            );
-        }
-      });
-    }
-    return content;
-  };
-
-  /* LOADING & ERROR STATES */
   if (loading) {
     return (
       <div className="w-full min-h-screen flex items-center justify-center bg-slate-950">
@@ -130,16 +103,13 @@ export default function MyBlogDetailPage() {
     );
   }
 
-  if (error || !blog) {
+  if (error || !post) {
     return (
       <div className="w-full min-h-screen flex items-center justify-center bg-slate-950">
         <p className="text-red-500">{error || "Blog not found"}</p>
       </div>
     );
   }
-
-  // Generate content with images injected
-  const finalContent = getProcessedContent(blog);
 
   return (
     <motion.div
@@ -156,65 +126,44 @@ export default function MyBlogDetailPage() {
           transition={{ duration: 0.5 }}
           className="text-4xl leading-[60px] text-center font-bold text-teal-400 capitalize"
         >
-          {blog.title}
+          {post.title}
         </motion.h1>
 
-        {/* CREATED DATE */}
+        {/* DATE */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.2 }}
           className="w-full flex items-center justify-center font-light text-gray-400 mt-1"
         >
-          {blog.createdAt ? `Created ${moment(blog.createdAt).fromNow()}` : ""}
+          {post.createdAt
+            ? `Published ${moment(post.createdAt).fromNow()}`
+            : ""}
         </motion.div>
 
-        {/* STATUS BADGE */}
+        {/* PUBLISHED BADGE */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.25 }}
           className="flex justify-center mt-3"
         >
-          <span
-            className={`text-sm px-4 py-1 rounded border ${
-              blog.status === "pending"
-                ? "bg-yellow-500/20 text-yellow-400 border-yellow-500"
-                : blog.status === "approved"
-                  ? "bg-blue-500/20 text-blue-400 border-blue-500"
-                  : blog.status === "rejected"
-                    ? "bg-red-500/20 text-red-400 border-red-500"
-                    : "bg-green-500/20 text-green-400 border-green-500"
-            }`}
-          >
-            {blog.status.toUpperCase()}
+          <span className="text-sm px-4 py-1 rounded border bg-green-500/20 text-green-400 border-green-500">
+            PUBLISHED
           </span>
         </motion.div>
 
-        {/* ADMIN NOTES */}
-        {blog.status === "rejected" && blog.adminNotes && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="mt-4 bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-lg text-sm text-center"
-          >
-            <span className="font-semibold">Rejection reason:</span>{" "}
-            {blog.adminNotes}
-          </motion.div>
-        )}
-
         {/* CATEGORIES */}
-        {blog.categories?.length > 0 && (
+        {post.category && post.category.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
+            transition={{ delay: 0.25 }}
             className="flex flex-wrap space-x-2 my-4 justify-center"
           >
-            {blog.categories.map((name, index) => (
+            {post.category.map(({ name, documentId }) => (
               <span
-                key={index}
+                key={documentId}
                 className="border border-teal-800 text-teal-300 px-2 py-1 text-sm rounded bg-teal-950/40 font-medium"
               >
                 {name}
@@ -224,30 +173,30 @@ export default function MyBlogDetailPage() {
         )}
 
         {/* COVER IMAGE */}
-        {blog.coverImage && (
+        {post.cover?.url && (
           <motion.div
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.35, duration: 0.5 }}
+            transition={{ delay: 0.3, duration: 0.5 }}
             className="relative h-72 w-full my-6"
           >
             <img
-              src={blog.coverImage}
-              alt={blog.title}
+              src={post.cover.url}
+              alt={post.title}
               className="rounded-lg w-full h-full object-cover"
             />
           </motion.div>
         )}
 
         {/* DESCRIPTION */}
-        {blog.description && (
+        {post.description && (
           <motion.p
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
+            transition={{ delay: 0.35 }}
             className="text-gray-400 leading-8 tracking-wide italic mt-2 mb-6 text-center"
           >
-            {blog.description}
+            {post.description}
           </motion.p>
         )}
 
@@ -255,16 +204,14 @@ export default function MyBlogDetailPage() {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 0.45 }}
+          transition={{ delay: 0.4 }}
           className="prose prose-invert max-w-none leading-relaxed"
         >
           <Markdown
             remarkPlugins={[remarkGfm, remarkBreaks]}
             rehypePlugins={[rehypeRaw]}
-            // Allows data:image URLs to be rendered
             urlTransform={(value) => value}
             components={{
-              /* HEADINGS */
               h1: ({ children }) => (
                 <h1 className="text-3xl font-bold text-teal-400 mt-10 mb-4 border-b border-teal-800 pb-2">
                   {children}
@@ -285,12 +232,9 @@ export default function MyBlogDetailPage() {
                   {children}
                 </h4>
               ),
-
-              /* TEXT */
               p: ({ children }) => (
                 <p className="text-gray-300 leading-relaxed my-3">{children}</p>
               ),
-
               ul: ({ children }) => (
                 <ul className="list-disc list-inside my-4 pl-2 text-gray-300 space-y-1">
                   {children}
@@ -302,32 +246,27 @@ export default function MyBlogDetailPage() {
                 </ol>
               ),
               li: ({ children }) => <li className="ml-2">{children}</li>,
-
               blockquote: ({ children }) => (
                 <blockquote className="border-l-4 border-teal-500 pl-4 ml-2 italic text-gray-400 my-4">
                   {children}
                 </blockquote>
               ),
-
-              /* ⬇️ CODE BLOCK CONTAINER ⬇️ */
-              pre: ({ children }) => {
-                return (
-                  <pre
-                    className="bg-slate-900 border border-slate-800 rounded-lg p-4 my-4 overflow-x-auto cursor-pointer relative group"
-                    onClick={(e) => {
-                      const text = e.currentTarget.innerText;
-                      handleCopyCode(text);
-                    }}
-                  >
-                    {children}
-                  </pre>
-                );
-              },
-
-              /* ⬇️ CODE TEXT ⬇️ */
+              u: ({ children }) => (
+                <u className="underline decoration-teal-500">{children}</u>
+              ),
+              pre: ({ children }) => (
+                <pre
+                  className="bg-slate-900 border border-slate-800 rounded-lg p-4 my-4 overflow-x-auto cursor-pointer relative group"
+                  onClick={(e) => {
+                    const text = e.currentTarget.innerText;
+                    handleCopyCode(text);
+                  }}
+                >
+                  {children}
+                </pre>
+              ),
               code: ({ children, className }) => {
                 const isInline = !className;
-
                 if (isInline) {
                   return (
                     <code className="text-teal-300 px-1.5 py-0.5 rounded text-sm">
@@ -335,18 +274,14 @@ export default function MyBlogDetailPage() {
                     </code>
                   );
                 }
-
                 return (
                   <code className="text-teal-300 text-sm block whitespace-pre">
                     {children}
                   </code>
                 );
               },
-
-              /* IMAGES */
               img: ({ src, alt, className }) => {
                 if (!src) return null;
-
                 return (
                   <img
                     src={src as string}
@@ -357,11 +292,6 @@ export default function MyBlogDetailPage() {
                     }
                     loading="lazy"
                     onError={(e) => {
-                      const safeSrc = String(src);
-                      console.error(
-                        "Image failed to load:",
-                        safeSrc.substring(0, 50) + "...",
-                      );
                       e.currentTarget.style.display = "none";
                     }}
                   />
@@ -369,7 +299,7 @@ export default function MyBlogDetailPage() {
               },
             }}
           >
-            {finalContent}
+            {post.content || ""}
           </Markdown>
         </motion.div>
 
@@ -378,28 +308,29 @@ export default function MyBlogDetailPage() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.5 }}
-          className="flex flex-col items-center justify-center text-gray-400 font-light mb-6 mt-10 text-sm border-t border-gray-800 pt-6"
+          className="flex flex-col items-center justify-center text-gray-400 font-light mb-6 mt-10 text-sm"
         >
-          <p>
-            Written by{" "}
-            <span className="font-medium text-teal-300">
-              {blog.author?.username || "Author"}
-            </span>{" "}
-            — {moment(blog.createdAt).fromNow()}
-          </p>
+          {post.author?.name && (
+            <p>
+              Written by{" "}
+              <span className="font-medium text-teal-300">
+                {post.author.name}
+              </span>{" "}
+              — {moment(post.createdAt).fromNow()}
+            </p>
+          )}
 
-          {/* Email Contact Block */}
-          {blog.author?.email && (
+          {(post.author?.email || post.writer?.email) && (
             <p className="text-gray-400 mt-1">
               Contact:{" "}
               <span className="font-medium text-teal-500">
-                {blog.author.email}
+                {post.author?.email || post.writer?.email}
               </span>
             </p>
           )}
         </motion.div>
 
-        {/* BACK */}
+        {/* BACK BUTTON */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -410,7 +341,7 @@ export default function MyBlogDetailPage() {
             onClick={() => router.push("/blogs")}
             className="text-teal-500 font-medium hover:underline"
           >
-            ← Back to Your Blogs
+            ← Back to Blogs
           </button>
         </motion.div>
       </div>
