@@ -7,7 +7,8 @@ import crypto from "crypto";
 
 const STRAPI_URL = process.env.STRAPI_URL!.replace(/\/$/, "");
 
-/* LOGIN OR REGISTER USER IN STRAPI */
+/* ───────────────── LOGIN OR REGISTER USER IN STRAPI ───────────────── */
+
 async function loginOrRegister(user: any): Promise<{ jwt: string }> {
 
   let password = user.strapi?.password;
@@ -25,14 +26,45 @@ async function loginOrRegister(user: any): Promise<{ jwt: string }> {
     })
   });
 
+  /* Login success */
   if (res.ok) {
     return res.json();
   }
 
+  /* If password exists but login failed → regenerate user */
   if (user.strapi?.password) {
-    throw new Error("Stored Strapi credentials are invalid");
+
+    console.log("Stored Strapi password invalid. Regenerating account...");
+
+    password = crypto.randomBytes(24).toString("hex");
+
+    res = await fetch(`${STRAPI_URL}/api/auth/local/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: user.email,
+        username: user.username,
+        password
+      })
+    });
+
+    if (!res.ok) {
+      throw new Error(`Strapi register retry failed: ${await res.text()}`);
+    }
+
+    const data = await res.json();
+
+    user.strapi = {
+      userId: data.user?.id,
+      password
+    };
+
+    await user.save();
+
+    return data;
   }
 
+  /* First time registration */
   res = await fetch(`${STRAPI_URL}/api/auth/local/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -58,6 +90,8 @@ async function loginOrRegister(user: any): Promise<{ jwt: string }> {
 
   return data;
 }
+
+/* ───────────────── DELETE ROUTE ───────────────── */
 
 export async function DELETE(req: NextRequest) {
 
@@ -104,9 +138,9 @@ export async function DELETE(req: NextRequest) {
 
     const { jwt } = await loginOrRegister(user);
 
-    /* ===============================
-       FIND BLOG IN STRAPI
-       =============================== */
+    /* ───────────────── FIND BLOG IN STRAPI USING SLUG ───────────────── */
+
+    console.log("Searching Strapi blog with slug:", blog.slug);
 
     const findRes = await fetch(
       `${STRAPI_URL}/api/blogs?filters[slug][$eq]=${blog.slug}&publicationState=preview&populate=*`,
@@ -125,17 +159,19 @@ export async function DELETE(req: NextRequest) {
     }
 
     const findData = await findRes.json();
-
     const entry = findData.data?.[0];
 
     if (entry) {
+
+      const attrs = entry.attributes || entry;
 
       const documentId = entry.documentId;
       const numericId = entry.id;
 
       const coverImageId =
-        entry.cover?.id ||
-        entry.attributes?.cover?.data?.id;
+        attrs.cover?.data?.id ||
+        attrs.cover?.id ||
+        undefined;
 
       console.log("Deleting Strapi blog:", documentId || numericId);
 
@@ -172,35 +208,28 @@ export async function DELETE(req: NextRequest) {
 
       console.log("Strapi blog deleted");
 
-      /* ===============================
-         DELETE COVER IMAGE
-         =============================== */
+      /* ───────────────── DELETE COVER IMAGE ───────────────── */
 
       if (coverImageId) {
 
         console.log("Deleting cover image:", coverImageId);
 
-        await fetch(
-          `${STRAPI_URL}/api/upload/files/${coverImageId}`,
-          {
-            method: "DELETE",
-            headers: {
-              Authorization: `Bearer ${jwt}`
-            }
+        await fetch(`${STRAPI_URL}/api/upload/files/${coverImageId}`, {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${jwt}`
           }
-        );
+        });
       }
 
-      /* ===============================
-         DELETE INLINE IMAGES
-         =============================== */
+      /* ───────────────── DELETE INLINE IMAGES ───────────────── */
 
       if (blog.inlineImages && Array.isArray(blog.inlineImages)) {
 
         for (const img of blog.inlineImages) {
 
           const search = await fetch(
-            `${STRAPI_URL}/api/upload/files?filters[name][$contains]=${img.id}`,
+            `${STRAPI_URL}/api/upload/files?filters[name][$contains]=${encodeURIComponent(img.id)}`,
             {
               headers: {
                 Authorization: `Bearer ${jwt}`
@@ -237,9 +266,7 @@ export async function DELETE(req: NextRequest) {
 
     }
 
-    /* ===============================
-       DELETE FROM MONGODB
-       =============================== */
+    /* ───────────────── DELETE FROM MONGODB ───────────────── */
 
     await Blog.findByIdAndDelete(blogId);
 
