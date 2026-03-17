@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 function insertTextAtCursor(
   el: HTMLTextAreaElement,
@@ -22,6 +22,82 @@ function insertTextAtCursor(
   el.selectionStart = el.selectionEnd = newPos;
 
   el.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+/* -------------------------------------------------------
+   Reusable styled validation warning.
+   AnimatePresence must wrap this at the call site (not here)
+   so it can observe the child unmounting and play exit animation.
+------------------------------------------------------- */
+function ValidationWarning({ message }: { message: string }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -8, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -8, scale: 0.97 }}
+      transition={{ duration: 0.35, ease: "easeOut" }}
+      className="mt-2 flex items-start gap-2 bg-[#fff8e7] border border-[#f0c040] text-[#333] text-sm px-3 py-2 rounded shadow-md"
+    >
+      <span className="text-base leading-none mt-0.5">⚠️</span>
+      <span>{message}</span>
+    </motion.div>
+  );
+}
+
+/* -------------------------------------------------------
+   Success Modal — styled after the browser confirm dialog
+------------------------------------------------------- */
+function SuccessModal({
+  message,
+  onOk,
+}: {
+  message: string;
+  onOk: () => void;
+}) {
+  return (
+    // Backdrop
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+    >
+      {/* Dialog box */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.92, y: 16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.92, y: 16 }}
+        transition={{ duration: 0.25, ease: "easeOut" }}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden"
+      >
+        {/* Header bar — mimics the browser dialog title bar */}
+        <div className="px-5 pt-5 pb-3 border-b border-gray-200">
+          <p className="font-bold text-gray-900 text-base">
+            {typeof window !== "undefined"
+              ? window.location.host
+              : "localhost:3000"}{" "}
+            says
+          </p>
+        </div>
+
+        {/* Body */}
+        <div className="px-5 py-4">
+          <p className="text-gray-700 text-sm leading-relaxed">{message}</p>
+        </div>
+
+        {/* Footer buttons */}
+        <div className="px-5 pb-5 flex justify-end gap-3">
+          <button
+            onClick={onOk}
+            className="px-6 py-1.5 rounded-full bg-teal-700 hover:bg-teal-600 text-white text-sm font-medium transition"
+          >
+            OK
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
 }
 
 interface Category {
@@ -59,8 +135,27 @@ export default function EditBlogPage() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
+  // Success modal state
+  const [successModal, setSuccessModal] = useState<{
+    visible: boolean;
+    message: string;
+  }>({
+    visible: false,
+    message: "",
+  });
+
+  // Controls whether styled validation warnings are visible.
+  // Set to true on first submit attempt so warnings only appear after the user tries to submit.
+  const [showErrors, setShowErrors] = useState(false);
+
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const inlineImageInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Section refs used to scroll to the first invalid field on submit
+  const titleRef = useRef<HTMLDivElement>(null);
+  const descriptionRef = useRef<HTMLDivElement>(null);
+  const categoryRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch("/api/user/username")
@@ -194,22 +289,76 @@ export default function EditBlogPage() {
   };
 
   /* -------------------------------------------------------
+     Validation helpers — mirror Mongoose schema constraints
+  ------------------------------------------------------- */
+  function getTitleError(): string | null {
+    if (title.trim().length === 0) return "Please fill in this field.";
+    if (title.trim().length < 10)
+      return `Please lengthen this text to 10 characters or more (you are currently using ${title.trim().length} character${title.trim().length !== 1 ? "s" : ""}).`;
+    return null;
+  }
+
+  function getDescriptionError(): string | null {
+    if (description.trim().length === 0) return "Please fill in this field.";
+    if (description.trim().length < 10)
+      return `Please lengthen this text to 10 characters or more (you are currently using ${description.trim().length} character${description.trim().length !== 1 ? "s" : ""}).`;
+    return null;
+  }
+
+  function getContentError(): string | null {
+    if (content.trim().length === 0) return "Please fill in this field.";
+    if (content.trim().length < 100)
+      return `Please lengthen this text to 100 characters or more (you are currently using ${content.trim().length} character${content.trim().length !== 1 ? "s" : ""}).`;
+    return null;
+  }
+
+  function getCategoryError(): string | null {
+    if (selectedCategories.length === 0)
+      return "Please select at least one category.";
+    return null;
+  }
+
+  /* -------------------------------------------------------
      Submit Edits
   ------------------------------------------------------- */
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!user) return setMessage("You must be logged in to edit a blog.");
-    if (!title.trim()) return setMessage("Title is required.");
-    if (!slug.trim()) return setMessage("Slug is required.");
-    if (!content.trim()) return setMessage("Content is required.");
-    if (!description.trim()) return setMessage("Description is required.");
-    if (selectedCategories.length === 0)
-      return setMessage("Please select at least one category.");
+
+    setShowErrors(true);
+
+    // Scroll to the first invalid field
+    const firstErrorRef = getTitleError()
+      ? titleRef
+      : getDescriptionError()
+        ? descriptionRef
+        : getCategoryError()
+          ? categoryRef
+          : getContentError()
+            ? contentRef
+            : null;
+
+    if (firstErrorRef?.current) {
+      setTimeout(() => {
+        firstErrorRef.current!.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      }, 50);
+    }
+
+    if (
+      getTitleError() ||
+      getDescriptionError() ||
+      getCategoryError() ||
+      getContentError() ||
+      !slug.trim()
+    )
+      return;
 
     setSubmitting(true);
     setMessage(null);
 
-    // Only send images whose placeholder is still in content
     const activeInlineImages = inlineImages.filter((img) =>
       content.includes(img.placeholder),
     );
@@ -224,7 +373,7 @@ export default function EditBlogPage() {
           content: content.trim(),
           description: description.trim(),
           coverImage: coverImage,
-          inlineImages: activeInlineImages, // Only send active (non-orphaned) inline images
+          inlineImages: activeInlineImages,
           categories: selectedCategories,
         }),
       });
@@ -233,12 +382,13 @@ export default function EditBlogPage() {
 
       if (!res.ok) throw new Error(data.error || "Failed to update blog");
 
-      setMessage(
-        data.isEditPending
-          ? "✅ Edit submitted for admin review!"
-          : "✅ Blog updated successfully!",
-      );
-      setTimeout(() => router.push("/blogs"), 1500);
+      // Show the custom success modal instead of inline message
+      setSuccessModal({
+        visible: true,
+        message: data.isEditPending
+          ? "Your edit has been submitted for admin review before replacing the live version."
+          : "Your blog has been updated successfully.",
+      });
     } catch (err: any) {
       setMessage(`❌ ${err.message}`);
     } finally {
@@ -372,111 +522,239 @@ export default function EditBlogPage() {
   }
 
   return (
-    <motion.main
-      initial={{ opacity: 0, y: 40 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6 }}
-      className="min-h-screen bg-slate-950 text-gray-100 px-6 py-12"
-    >
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-4xl font-bold text-teal-400 mb-6">Edit Blog</h1>
-
-        <div className="bg-blue-500/10 border border-blue-500 text-blue-300 p-4 rounded-md mb-6">
-          <p className="text-sm">
-            ℹ️ If this blog is already published, your edits will be submitted
-            for admin review before replacing the live version.
-          </p>
-        </div>
-
-        {message && (
-          <div
-            className={`mb-4 p-3 rounded-md text-center ${
-              message.startsWith("✅")
-                ? "bg-teal-500/20 border border-teal-500 text-teal-300"
-                : "bg-red-500/20 border border-red-500 text-red-300"
-            }`}
-          >
-            {message}
-          </div>
+    <>
+      {/* -------------------------------------------------------
+          Success Modal — rendered outside the form so it overlays
+          the entire page cleanly
+      ------------------------------------------------------- */}
+      <AnimatePresence>
+        {successModal.visible && (
+          <SuccessModal
+            message={successModal.message}
+            onOk={() => {
+              setSuccessModal({ visible: false, message: "" });
+              router.push("/blogs");
+            }}
+          />
         )}
+      </AnimatePresence>
 
-        <form
-          onSubmit={handleSubmit}
-          className="flex flex-col gap-4 bg-gray-900 p-6 rounded-xl border border-gray-800"
-        >
-          {/* Title */}
-          <div>
-            <label className="block text-sm text-gray-400 mb-2">
-              Title <span className="text-red-500">*</span>
-            </label>
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Your blog title"
-              required
-              minLength={10}
-              maxLength={200}
-              className="w-full p-3 rounded-md bg-gray-800 border border-gray-700 focus:border-teal-400 outline-none"
-            />
-          </div>
+      <motion.main
+        initial={{ opacity: 0, y: 40 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+        className="min-h-screen bg-slate-950 text-gray-100 px-6 py-12"
+      >
+        <div className="max-w-4xl mx-auto">
+          <h1 className="text-4xl font-bold text-teal-400 mb-6">Edit Blog</h1>
 
-          {/* Description */}
-          <div>
-            <label className="block text-sm text-gray-400 mb-2">
-              Description <span className="text-red-500">*</span>
-            </label>
-            <input
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Short description (10-300 characters)"
-              required
-              minLength={10}
-              maxLength={300}
-              className="w-full p-3 rounded-md bg-gray-800 border border-gray-700 focus:border-teal-400 outline-none"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              This will be used as the blog preview/excerpt
+          <div className="bg-blue-500/10 border border-blue-500 text-blue-300 p-4 rounded-md mb-6">
+            <p className="text-sm">
+              ℹ️ If this blog is already published, your edits will be submitted
+              for admin review before replacing the live version.
             </p>
           </div>
 
-          {/* CATEGORIES */}
-          <div>
-            <label className="block text-sm text-gray-400 mb-2">
-              category ({selectedCategories.length})
-            </label>
+          {message && (
+            <div className="mb-4 p-3 rounded-md text-center bg-red-500/20 border border-red-500 text-red-300">
+              {message}
+            </div>
+          )}
 
-            {selectedCategories.length < 3 && (
-              <select
-                value=""
-                onChange={(e) => {
-                  if (e.target.value && selectedCategories.length < 3) {
-                    setSelectedCategories([
-                      ...selectedCategories,
-                      e.target.value,
-                    ]);
+          {/* noValidate disables browser's own constraint UI so our styled warnings take over */}
+          <form
+            onSubmit={handleSubmit}
+            noValidate
+            className="flex flex-col gap-4 bg-gray-900 p-6 rounded-xl border border-gray-800"
+          >
+            {/* Title */}
+            <div ref={titleRef}>
+              <label className="block text-sm text-gray-400 mb-2">
+                Title <span className="text-red-500">*</span>
+              </label>
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Your blog title"
+                maxLength={200}
+                className="w-full p-3 rounded-md bg-gray-800 border border-gray-700 focus:border-teal-400 outline-none"
+              />
+              <AnimatePresence>
+                {showErrors && getTitleError() && (
+                  <ValidationWarning
+                    key="title-err"
+                    message={getTitleError()!}
+                  />
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Description */}
+            <div ref={descriptionRef}>
+              <label className="block text-sm text-gray-400 mb-2">
+                Description <span className="text-red-500">*</span>
+              </label>
+              <input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Short description (10-300 characters)"
+                maxLength={300}
+                className="w-full p-3 rounded-md bg-gray-800 border border-gray-700 focus:border-teal-400 outline-none"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                This will be used as the blog preview/excerpt
+              </p>
+              <AnimatePresence>
+                {showErrors && getDescriptionError() && (
+                  <ValidationWarning
+                    key="desc-err"
+                    message={getDescriptionError()!}
+                  />
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* CATEGORIES */}
+            <div ref={categoryRef}>
+              <label className="block text-sm text-gray-400 mb-2">
+                category ({selectedCategories.length})
+              </label>
+
+              {selectedCategories.length < 3 && (
+                <select
+                  value=""
+                  onChange={(e) => {
+                    if (e.target.value && selectedCategories.length < 3) {
+                      setSelectedCategories([
+                        ...selectedCategories,
+                        e.target.value,
+                      ]);
+                    }
+                  }}
+                  className="w-full p-3 rounded-md bg-gray-800 border border-gray-700 focus:border-teal-400 outline-none mb-3"
+                  disabled={
+                    loadingCategories || availableCategories.length === 0
                   }
-                }}
-                className="w-full p-3 rounded-md bg-gray-800 border border-gray-700 focus:border-teal-400 outline-none mb-3"
-                disabled={loadingCategories || availableCategories.length === 0}
-              >
-                <option value="">Add or create a relation</option>
-                {availableCategories.map((cat) => (
-                  <option key={cat.id} value={cat.slug}>
-                    {cat.name}
-                  </option>
-                ))}
-              </select>
-            )}
-
-            <div className="space-y-2">
-              {selectedCategories.map((catSlug) => (
-                <div
-                  key={catSlug}
-                  className="flex items-center justify-between p-3 bg-gray-800 border border-gray-700 rounded-md group hover:border-teal-500 transition"
                 >
-                  <div className="flex items-center gap-3">
+                  <option value="">Add or create a relation</option>
+                  {availableCategories.map((cat) => (
+                    <option key={cat.id} value={cat.slug}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              <div className="space-y-2">
+                {selectedCategories.map((catSlug) => (
+                  <div
+                    key={catSlug}
+                    className="flex items-center justify-between p-3 bg-gray-800 border border-gray-700 rounded-md group hover:border-teal-500 transition"
+                  >
+                    <div className="flex items-center gap-3">
+                      <svg
+                        className="w-4 h-4 text-gray-500"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 6h16M4 12h16M4 18h16"
+                        />
+                      </svg>
+                      <span className="text-gray-200">
+                        {getCategoryName(catSlug)}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedCategories(
+                          selectedCategories.filter((c) => c !== catSlug),
+                        )
+                      }
+                      className="text-gray-500 hover:text-red-400 transition"
+                    >
+                      <svg
+                        className="w-5 h-5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M6 18L18 6M6 6l12 12"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <p className="text-xs text-gray-500 mt-2">
+                {selectedCategories.length === 0 &&
+                  "Select at least 1 category"}
+                {selectedCategories.length > 0 &&
+                  selectedCategories.length < 3 &&
+                  `You can select ${3 - selectedCategories.length} more`}
+                {selectedCategories.length === 3 &&
+                  "Maximum 3 categories selected"}
+              </p>
+              <AnimatePresence>
+                {showErrors && getCategoryError() && (
+                  <ValidationWarning
+                    key="cat-err"
+                    message={getCategoryError()!}
+                  />
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Slug */}
+            <div>
+              <label className="block text-sm text-gray-400 mb-2">
+                Slug <span className="text-red-500">*</span>
+              </label>
+              <input
+                value={slug}
+                onChange={(e) => setSlug(e.target.value)}
+                placeholder="my-blog-post (URL-friendly, lowercase, no spaces)"
+                required
+                pattern="[a-z0-9-]+"
+                className="w-full p-3 rounded-md bg-gray-800 border border-gray-700 focus:border-teal-400 outline-none"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Used in URL: yoursite.com/blog/
+                <strong>{slug || "slug"}</strong>
+              </p>
+            </div>
+
+            {/* Cover Image Upload */}
+            <div>
+              <label className="block text-sm text-gray-400 mb-2">
+                Cover Image (Optional)
+              </label>
+
+              {!imagePreview ? (
+                <div className="border-2 border-dashed border-gray-700 rounded-md p-6 text-center hover:border-teal-500 transition">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                    id="cover-image-upload"
+                  />
+                  <label
+                    htmlFor="cover-image-upload"
+                    className="cursor-pointer flex flex-col items-center"
+                  >
                     <svg
-                      className="w-4 h-4 text-gray-500"
+                      className="w-12 h-12 text-gray-600 mb-3"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -485,21 +763,29 @@ export default function EditBlogPage() {
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         strokeWidth={2}
-                        d="M4 6h16M4 12h16M4 18h16"
+                        d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
                       />
                     </svg>
-                    <span className="text-gray-200">
-                      {getCategoryName(catSlug)}
+                    <span className="text-sm text-gray-400">
+                      Click to upload cover image
                     </span>
-                  </div>
+                    <span className="text-xs text-gray-600 mt-1">
+                      Max size: 2MB
+                    </span>
+                  </label>
+                </div>
+              ) : (
+                <div className="relative">
+                  <img
+                    src={imagePreview}
+                    alt="Cover preview"
+                    className="w-full h-64 object-cover rounded-md"
+                  />
                   <button
                     type="button"
-                    onClick={() =>
-                      setSelectedCategories(
-                        selectedCategories.filter((c) => c !== catSlug),
-                      )
-                    }
-                    className="text-gray-500 hover:text-red-400 transition"
+                    onClick={clearImage}
+                    className="absolute top-2 right-2 bg-red-600 hover:bg-red-500 text-white p-2 rounded-full transition"
+                    title="Remove image"
                   >
                     <svg
                       className="w-5 h-5"
@@ -516,296 +802,203 @@ export default function EditBlogPage() {
                     </svg>
                   </button>
                 </div>
-              ))}
+              )}
             </div>
 
-            <p className="text-xs text-gray-500 mt-2">
-              {selectedCategories.length === 0 && "Select at least 1 category"}
-              {selectedCategories.length > 0 &&
-                selectedCategories.length < 3 &&
-                `You can select ${3 - selectedCategories.length} more`}
-              {selectedCategories.length === 3 &&
-                "Maximum 3 categories selected"}
-            </p>
-          </div>
+            {/* Markdown Editor */}
+            <div ref={contentRef}>
+              <label className="block text-sm text-gray-400 mb-2">
+                Content <span className="text-red-500">*</span>
+              </label>
 
-          {/* Slug */}
-          <div>
-            <label className="block text-sm text-gray-400 mb-2">
-              Slug <span className="text-red-500">*</span>
-            </label>
-            <input
-              value={slug}
-              onChange={(e) => setSlug(e.target.value)}
-              placeholder="my-blog-post (URL-friendly, lowercase, no spaces)"
-              required
-              pattern="[a-z0-9-]+"
-              className="w-full p-3 rounded-md bg-gray-800 border border-gray-700 focus:border-teal-400 outline-none"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Used in URL: yoursite.com/blog/
-              <strong>{slug || "slug"}</strong>
-            </p>
-          </div>
-
-          {/* Cover Image Upload */}
-          <div>
-            <label className="block text-sm text-gray-400 mb-2">
-              Cover Image (Optional)
-            </label>
-
-            {!imagePreview ? (
-              <div className="border-2 border-dashed border-gray-700 rounded-md p-6 text-center hover:border-teal-500 transition">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageUpload}
-                  className="hidden"
-                  id="cover-image-upload"
-                />
-                <label
-                  htmlFor="cover-image-upload"
-                  className="cursor-pointer flex flex-col items-center"
-                >
-                  <svg
-                    className="w-12 h-12 text-gray-600 mb-3"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                    />
-                  </svg>
-                  <span className="text-sm text-gray-400">
-                    Click to upload cover image
-                  </span>
-                  <span className="text-xs text-gray-600 mt-1">
-                    Max size: 2MB
-                  </span>
-                </label>
-              </div>
-            ) : (
-              <div className="relative">
-                <img
-                  src={imagePreview}
-                  alt="Cover preview"
-                  className="w-full h-64 object-cover rounded-md"
-                />
-                <button
-                  type="button"
-                  onClick={clearImage}
-                  className="absolute top-2 right-2 bg-red-600 hover:bg-red-500 text-white p-2 rounded-full transition"
-                  title="Remove image"
-                >
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Markdown Editor */}
-          <div>
-            <label className="block text-sm text-gray-400 mb-2">
-              Content <span className="text-red-500">*</span>
-            </label>
-
-            {/* Count reflects only active (non-orphaned) inline images */}
-            {inlineImages.filter((img) => content.includes(img.placeholder))
-              .length > 0 && (
-              <div className="mb-2 text-xs text-gray-500">
-                📷{" "}
-                {
-                  inlineImages.filter((img) =>
+              {inlineImages.filter((img) => content.includes(img.placeholder))
+                .length > 0 && (
+                <div className="mb-2 text-xs text-gray-500">
+                  📷{" "}
+                  {
+                    inlineImages.filter((img) =>
+                      content.includes(img.placeholder),
+                    ).length
+                  }{" "}
+                  inline image
+                  {inlineImages.filter((img) =>
                     content.includes(img.placeholder),
-                  ).length
-                }{" "}
-                inline image
-                {inlineImages.filter((img) => content.includes(img.placeholder))
-                  .length !== 1
-                  ? "s"
-                  : ""}{" "}
-                added
-              </div>
-            )}
+                  ).length !== 1
+                    ? "s"
+                    : ""}{" "}
+                  added
+                </div>
+              )}
 
-            <div className="bg-slate-900 border border-gray-800 rounded-md">
-              <div className="flex flex-wrap gap-2 p-2 border-b border-gray-800 text-sm">
-                <button
-                  onClick={() => wrapSelection("**", "**")}
-                  type="button"
-                  className="px-3 py-1 rounded hover:bg-slate-800 font-bold"
-                >
-                  B
-                </button>
-                <button
-                  onClick={() => wrapSelection("_", "_")}
-                  type="button"
-                  className="px-3 py-1 rounded hover:bg-slate-800 italic"
-                >
-                  I
-                </button>
-                <button
-                  onClick={() => wrapSelection("<u>", "</u>")}
-                  type="button"
-                  className="px-3 py-1 rounded hover:bg-slate-800 underline"
-                >
-                  U
-                </button>
-                <button
-                  onClick={() => wrapSelection("~~", "~~")}
-                  type="button"
-                  className="px-3 py-1 rounded hover:bg-slate-800 line-through"
-                >
-                  S
-                </button>
-
-                <div className="w-px bg-gray-700"></div>
-
-                <button
-                  onClick={() => handleHeading(1)}
-                  type="button"
-                  className="px-3 py-1 rounded hover:bg-slate-800"
-                >
-                  H1
-                </button>
-                <button
-                  onClick={() => handleHeading(2)}
-                  type="button"
-                  className="px-3 py-1 rounded hover:bg-slate-800"
-                >
-                  H2
-                </button>
-                <button
-                  onClick={() => handleHeading(3)}
-                  type="button"
-                  className="px-3 py-1 rounded hover:bg-slate-800"
-                >
-                  H3
-                </button>
-                <button
-                  onClick={() => handleHeading(4)}
-                  type="button"
-                  className="px-3 py-1 rounded hover:bg-slate-800"
-                >
-                  H4
-                </button>
-
-                <div className="w-px bg-gray-700"></div>
-
-                <button
-                  onClick={insertBulletList}
-                  type="button"
-                  className="px-3 py-1 rounded hover:bg-slate-800"
-                  title="Bulleted list"
-                >
-                  •
-                </button>
-                <button
-                  onClick={insertNumberedList}
-                  type="button"
-                  className="px-3 py-1 rounded hover:bg-slate-800"
-                  title="Numbered list"
-                >
-                  1.
-                </button>
-
-                <div className="w-px bg-gray-700"></div>
-
-                <button
-                  onClick={() => wrapSelection("> ")}
-                  type="button"
-                  className="px-3 py-1 rounded hover:bg-slate-800"
-                >
-                  Quote
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => wrapSelection("```\n", "\n```")}
-                  className="px-3 py-1 rounded hover:bg-slate-800"
-                >
-                  Code
-                </button>
-
-                <div className="w-px bg-gray-700"></div>
-
-                <button
-                  type="button"
-                  onClick={openInlineImagePicker}
-                  className="px-3 py-1 rounded hover:bg-slate-800 flex items-center gap-1"
-                  title="Insert image"
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+              <div className="bg-slate-900 border border-gray-800 rounded-md">
+                <div className="flex flex-wrap gap-2 p-2 border-b border-gray-800 text-sm">
+                  <button
+                    onClick={() => wrapSelection("**", "**")}
+                    type="button"
+                    className="px-3 py-1 rounded hover:bg-slate-800 font-bold"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                    />
-                  </svg>
-                  Image
-                </button>
+                    B
+                  </button>
+                  <button
+                    onClick={() => wrapSelection("_", "_")}
+                    type="button"
+                    className="px-3 py-1 rounded hover:bg-slate-800 italic"
+                  >
+                    I
+                  </button>
+                  <button
+                    onClick={() => wrapSelection("<u>", "</u>")}
+                    type="button"
+                    className="px-3 py-1 rounded hover:bg-slate-800 underline"
+                  >
+                    U
+                  </button>
+                  <button
+                    onClick={() => wrapSelection("~~", "~~")}
+                    type="button"
+                    className="px-3 py-1 rounded hover:bg-slate-800 line-through"
+                  >
+                    S
+                  </button>
 
-                <input
-                  ref={inlineImageInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleInlineImageUpload}
-                  className="hidden"
+                  <div className="w-px bg-gray-700"></div>
+
+                  <button
+                    onClick={() => handleHeading(1)}
+                    type="button"
+                    className="px-3 py-1 rounded hover:bg-slate-800"
+                  >
+                    H1
+                  </button>
+                  <button
+                    onClick={() => handleHeading(2)}
+                    type="button"
+                    className="px-3 py-1 rounded hover:bg-slate-800"
+                  >
+                    H2
+                  </button>
+                  <button
+                    onClick={() => handleHeading(3)}
+                    type="button"
+                    className="px-3 py-1 rounded hover:bg-slate-800"
+                  >
+                    H3
+                  </button>
+                  <button
+                    onClick={() => handleHeading(4)}
+                    type="button"
+                    className="px-3 py-1 rounded hover:bg-slate-800"
+                  >
+                    H4
+                  </button>
+
+                  <div className="w-px bg-gray-700"></div>
+
+                  <button
+                    onClick={insertBulletList}
+                    type="button"
+                    className="px-3 py-1 rounded hover:bg-slate-800"
+                    title="Bulleted list"
+                  >
+                    •
+                  </button>
+                  <button
+                    onClick={insertNumberedList}
+                    type="button"
+                    className="px-3 py-1 rounded hover:bg-slate-800"
+                    title="Numbered list"
+                  >
+                    1.
+                  </button>
+
+                  <div className="w-px bg-gray-700"></div>
+
+                  <button
+                    onClick={() => wrapSelection("> ")}
+                    type="button"
+                    className="px-3 py-1 rounded hover:bg-slate-800"
+                  >
+                    Quote
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => wrapSelection("```\n", "\n```")}
+                    className="px-3 py-1 rounded hover:bg-slate-800"
+                  >
+                    Code
+                  </button>
+
+                  <div className="w-px bg-gray-700"></div>
+
+                  <button
+                    type="button"
+                    onClick={openInlineImagePicker}
+                    className="px-3 py-1 rounded hover:bg-slate-800 flex items-center gap-1"
+                    title="Insert image"
+                  >
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                      />
+                    </svg>
+                    Image
+                  </button>
+
+                  <input
+                    ref={inlineImageInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleInlineImageUpload}
+                    className="hidden"
+                  />
+                </div>
+
+                <textarea
+                  ref={textareaRef}
+                  value={content}
+                  onChange={(e) => {
+                    const newContent = e.target.value;
+                    setContent(newContent);
+                    setInlineImages((prev) =>
+                      prev.filter((img) =>
+                        newContent.includes(img.placeholder),
+                      ),
+                    );
+                  }}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Write your blog content here (minimum 100 characters)..."
+                  className="w-full p-4 h-72 bg-slate-900 text-gray-100 resize-vertical rounded-b-md outline-none font-mono text-sm"
                 />
               </div>
-
-              <textarea
-                ref={textareaRef}
-                value={content}
-                onChange={(e) => {
-                  const newContent = e.target.value;
-                  setContent(newContent);
-                  // Real-time: prune inline images no longer referenced in content
-                  setInlineImages((prev) =>
-                    prev.filter((img) => newContent.includes(img.placeholder)),
-                  );
-                }}
-                onKeyDown={handleKeyDown}
-                placeholder="Write your blog content here (minimum 100 characters)..."
-                required
-                minLength={100}
-                className="w-full p-4 h-72 bg-slate-900 text-gray-100 resize-vertical rounded-b-md outline-none font-mono text-sm"
-              />
+              <AnimatePresence>
+                {showErrors && getContentError() && (
+                  <ValidationWarning
+                    key="content-err"
+                    message={getContentError()!}
+                  />
+                )}
+              </AnimatePresence>
             </div>
-          </div>
 
-          {/* Submit Button */}
-          <button
-            type="submit"
-            disabled={submitting}
-            className="bg-teal-500 hover:bg-teal-400 text-gray-900 font-semibold py-3 rounded-md transition disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {submitting ? "Saving..." : "Save Changes"}
-          </button>
-        </form>
-      </div>
-    </motion.main>
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={submitting}
+              className="bg-teal-500 hover:bg-teal-400 text-gray-900 font-semibold py-3 rounded-md transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {submitting ? "Saving..." : "Save Changes"}
+            </button>
+          </form>
+        </div>
+      </motion.main>
+    </>
   );
 }
