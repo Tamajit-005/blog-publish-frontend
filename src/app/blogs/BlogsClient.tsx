@@ -487,7 +487,7 @@ export default function BlogsClient() {
                       )}
                     </button>
                   )}
-                </button>
+                </div>
 
                 {/* COVER IMAGE */}
                 {displayCoverImage ? (
