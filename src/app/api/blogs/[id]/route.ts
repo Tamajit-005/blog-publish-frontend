@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkUserAuth } from "@/lib/adminAuth";
 import dbConnect from "@/lib/mongoose";
 import Blog from "@/models/Blog";
+import { sendBlogEmail } from "@/lib/email";
 
 export async function GET(
   req: NextRequest,
@@ -77,6 +78,17 @@ export async function DELETE(
       blog.isDeletionRejected = false;
       blog.deletionRejectedNotes = undefined;
       await blog.save();
+
+      // Send email notification to admins about deletion request
+      await sendBlogEmail({
+        type: "delete_requested",
+        blogTitle: blog.title,
+        authorName: blog.author.username,
+        authorEmail: blog.author.email,
+        blogId: blog._id.toString(),
+        description: blog.description,
+        submittedAt: blog.deletionRequestedAt?.toString(),
+      });
 
       return NextResponse.json({
         message: "Deletion requested successfully. Waiting for admin approval.",

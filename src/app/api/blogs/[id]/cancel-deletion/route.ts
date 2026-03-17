@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkUserAuth } from "@/lib/adminAuth";
 import dbConnect from "@/lib/mongoose";
 import Blog from "@/models/Blog";
+import { sendBlogEmail } from "@/lib/email";
 
 const CANCELLATION_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -24,6 +25,7 @@ export async function POST(
     const { id } = await params;
     const blog = await Blog.findById(id);
 
+    // Check if blog exists and belongs to the authenticated user
     if (!blog) {
       return NextResponse.json({ error: "Blog not found" }, { status: 404 });
     }
@@ -54,7 +56,7 @@ export async function POST(
     if (elapsed > CANCELLATION_WINDOW_MS) {
       return NextResponse.json(
         { error: "Cancellation window has expired. You cannot cancel this request anymore." },
-        { status: 410 } // 410 Gone indicates that the resource is no longer available and will not be available again
+        { status: 410 }
       );
     }
 
@@ -62,6 +64,17 @@ export async function POST(
     blog.deletionRequested = false;
     blog.deletionRequestedAt = undefined;
     await blog.save();
+
+    // Send deletion cancellation email
+    await sendBlogEmail({
+      type: "delete_cancelled",
+      blogTitle: blog.title,
+      authorName: blog.author.username,
+      authorEmail: blog.author.email,
+      blogId: blog._id.toString(),
+      description: blog.description,
+      submittedAt: new Date().toISOString(),
+    });
 
     return NextResponse.json({
       message: "Deletion request cancelled successfully.",
