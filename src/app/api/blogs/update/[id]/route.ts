@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkUserAuth } from "@/lib/adminAuth";
 import dbConnect from "@/lib/mongoose";
 import Blog from "@/models/Blog";
+import { sendBlogEmail } from "@/lib/email";
 
 function extractFilenameFromBase64(base64?: string): string | undefined {
   if (!base64 || !base64.startsWith("data:image/")) return undefined;
@@ -70,6 +71,17 @@ export async function PUT(
       blog.isEditRejected = false;
       blog.adminNotes = undefined;
       await blog.save();
+
+      // Send email notification about the edit submission
+      await sendBlogEmail({
+        type: "edit_submitted",
+        blogTitle: blog.title,
+        authorName: auth.user.username,
+        authorEmail: auth.user.email,
+        blogId: blog._id.toString(),
+        description: blog.pendingEdit?.description || blog.description,
+        submittedAt: new Date().toISOString(),
+      });
 
       return NextResponse.json({ message: "Edit submitted for admin review", isEditPending: true });
     } else {

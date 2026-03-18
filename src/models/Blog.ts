@@ -5,13 +5,14 @@ export interface IBlog extends Document {
   slug: string; // URL-friendly unique identifier generated from the title
   content: string; // Main content of the blog post, stored as HTML
   description: string; // Short summary of the blog post, used for previews and SEO
-  coverImage?: string; // URL  of cover image
+  coverImage?: string; // URL of cover image
   coverImageName?: string; // Original filename of the cover image
-  inlineImages?: { id: string; placeholder: string; base64: string; }[]; // Array of inline images with unique ID, placeholder text in content, and base64 data for upload
+  inlineImages?: { id: string; placeholder: string; base64: string }[]; // Array of inline images with unique ID, placeholder text in content, and base64 data for upload
   categories: string[]; // Array of categories/tags associated with the blog post
-  author: { auth0Id: string; username: string; email: string; }; // Author information including Auth0 ID, username, and email
+  author: { auth0Id: string; username: string; email: string }; // Author information including Auth0 ID, username, and email
   status: "draft" | "pending" | "approved" | "rejected" | "published";
   deletionRequested?: boolean; // Flag to indicate if the author has requested deletion of the blog post
+  deletionRequestedAt?: Date; // Timestamp of when the deletion request was made, used to enforce the 10-minute cancellation window
   isDeletionRejected?: boolean; // Flag to indicate if the deletion request has been rejected by admin
   isEditPending?: boolean; // Flag to indicate if there is a pending edit awaiting admin approval
   isEditRejected?: boolean; // Flag to indicate if the pending edit has been rejected by admin
@@ -24,7 +25,7 @@ export interface IBlog extends Document {
     description: string;
     coverImage?: string;
     coverImageName?: string;
-    inlineImages?: { id: string; placeholder: string; base64: string; }[];
+    inlineImages?: { id: string; placeholder: string; base64: string }[];
     categories: string[];
   };
   adminNotes?: string; // Admin notes for the blog post, used to communicate reasons for rejection or other feedback to the author
@@ -71,6 +72,7 @@ const BlogSchema = new mongoose.Schema<IBlog>(
       default: "pending",
     },
     deletionRequested: { type: Boolean, default: false },
+    deletionRequestedAt: { type: Date, default: null }, // Timestamp of when the deletion request was made
     isDeletionRejected: { type: Boolean, default: false },
     isEditPending: { type: Boolean, default: false },
     isEditRejected: { type: Boolean, default: false },
@@ -91,7 +93,7 @@ const BlogSchema = new mongoose.Schema<IBlog>(
     publishedAt: Date,
     rejectedAt: Date,
   },
-  { timestamps: true, strict: true }
+  { timestamps: true, strict: true },
 );
 
 BlogSchema.index({ "author.auth0Id": 1, status: 1 });

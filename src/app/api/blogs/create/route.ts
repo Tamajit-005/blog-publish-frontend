@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkUserAuth } from "@/lib/adminAuth";
 import dbConnect from "@/lib/mongoose";
 import Blog from "@/models/Blog";
+import { sendBlogEmail } from "@/lib/email";
 
 /* ───────────────── HELPERS ───────────────── */
 
@@ -188,7 +189,17 @@ export async function POST(req: NextRequest) {
       status: "pending",
     });
 
+    // Send email notification about the new blog submission
     console.log("✅ Blog created successfully:", blog._id);
+    await sendBlogEmail({
+      type: "blog_submitted",
+      blogTitle: blog.title,
+      authorName: auth.user.username,
+      authorEmail: auth.user.email,
+      blogId: blog._id.toString(),
+      description: blog.description,
+      submittedAt: blog.createdAt.toString(),
+    });
 
     return NextResponse.json({
       message: "Blog submitted for admin review",
