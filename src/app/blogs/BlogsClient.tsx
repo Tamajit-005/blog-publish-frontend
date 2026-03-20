@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import BlogPagination from "@/components/Pagination";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "react-hot-toast";
 
 const POSTS_PER_PAGE = 6;
@@ -22,12 +22,11 @@ interface Blog {
   createdAt: string;
   updatedAt: string;
   deletionRequested?: boolean;
-  deletionRequestedAt?: string; // ISO string timestamp of when deletion was requested
+  deletionRequestedAt?: string;
   isDeletionRejected?: boolean;
   deletionRejectedNotes?: string;
   isEditPending?: boolean;
   isEditRejected?: boolean;
-
   pendingEdit?: {
     title: string;
     description?: string;
@@ -55,10 +54,19 @@ export default function BlogsClient() {
   const [blogs, setBlogs] = useState<Blog[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [countdowns, setCountdowns] = useState<Record<string, number>>({});
+  // Tracks which card's kebab menu is open on mobile
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   const pendingDeletions = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map(),
   );
+
+  // Close kebab menu when tapping outside
+  useEffect(() => {
+    const handler = () => setOpenMenuId(null);
+    if (openMenuId) document.addEventListener("click", handler);
+    return () => document.removeEventListener("click", handler);
+  }, [openMenuId]);
 
   useEffect(() => {
     const fetchBlogs = async () => {
@@ -69,8 +77,7 @@ export default function BlogsClient() {
           const fetchedBlogs: Blog[] = data.blogs || [];
           setBlogs(fetchedBlogs);
 
-          // Seed countdowns directly here — not in a separate effect —
-          // so we don't miss the window between setBlogs and the effect running.
+          // Seed countdowns directly here
           const initial: Record<string, number> = {};
           fetchedBlogs.forEach((b) => {
             if (b.deletionRequested && b.deletionRequestedAt) {
@@ -122,7 +129,6 @@ export default function BlogsClient() {
 
   const handleCancelDeletion = async (e: React.MouseEvent, blog: Blog) => {
     e.stopPropagation();
-
     try {
       const res = await fetch(`/api/blogs/${blog._id}/cancel-deletion`, {
         method: "POST",
@@ -214,7 +220,6 @@ export default function BlogsClient() {
       return;
     }
 
-    // Non-published: confirm first, then optimistic removal with 8s undo window
     if (!confirm("Are you sure you want to delete this blog?")) return;
 
     setBlogs((prev) => (prev ? prev.filter((b) => b._id !== blog._id) : []));
@@ -378,6 +383,7 @@ export default function BlogsClient() {
             >
               <div
                 onClick={() => {
+                  if (openMenuId === blog._id) return; // don't navigate if menu is open
                   if (blog.status === "published" && !blog.isEditPending) {
                     router.push(`/blogs/${blog.slug}`);
                   } else {
@@ -386,13 +392,8 @@ export default function BlogsClient() {
                 }}
                 className="group block bg-gray-900 border border-gray-800 rounded-xl overflow-hidden hover:scale-[1.02] hover:border-teal-500 transition-all duration-300 cursor-pointer relative"
               >
-                {/*
-                  TOP-RIGHT BUTTON STRIP
-                  Always laid out as a flex row so buttons never overlap.
-                  Both buttons are absolutely positioned as a group in the top-right corner.
-                */}
-                <div className="absolute top-3 right-3 z-20 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  {/* EDIT BUTTON — always present */}
+                {/* ── DESKTOP: hover-reveal button strip ── */}
+                <div className="absolute top-3 right-3 z-20 hidden md:flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -416,7 +417,6 @@ export default function BlogsClient() {
                     </svg>
                   </button>
 
-                  {/* DELETE / CANCEL DELETION BUTTON */}
                   {canCancelDeletion ? (
                     <button
                       onClick={(e) => handleCancelDeletion(e, blog)}
@@ -489,6 +489,128 @@ export default function BlogsClient() {
                   )}
                 </div>
 
+                {/* ── MOBILE: always-visible ⋮ kebab menu ── */}
+                <div className="absolute top-3 right-3 z-20 md:hidden">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setOpenMenuId((prev) =>
+                        prev === blog._id ? null : blog._id,
+                      );
+                    }}
+                    className="w-8 h-8 flex items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm"
+                  >
+                    <svg
+                      className="w-4 h-4"
+                      fill="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle cx="12" cy="5" r="1.5" />
+                      <circle cx="12" cy="12" r="1.5" />
+                      <circle cx="12" cy="19" r="1.5" />
+                    </svg>
+                  </button>
+
+                  {/* DROPDOWN */}
+                  <AnimatePresence>
+                    {openMenuId === blog._id && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.92, y: -4 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.92, y: -4 }}
+                        transition={{ duration: 0.15 }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="absolute right-0 mt-1 w-44 bg-[#1a1c29] border border-gray-700 rounded-xl shadow-2xl overflow-hidden text-sm"
+                      >
+                        {/* Edit option */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenMenuId(null);
+                            router.push(`/blogs/edit/${blog._id}`);
+                          }}
+                          className="flex items-center gap-2.5 w-full px-4 py-3 text-left hover:bg-blue-600/30 transition-colors text-blue-400"
+                        >
+                          <svg
+                            className="w-4 h-4 shrink-0"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                            />
+                          </svg>
+                          Edit Blog
+                        </button>
+
+                        <div className="border-t border-gray-700" />
+
+                        {/* Delete / Cancel option */}
+                        {canCancelDeletion ? (
+                          <button
+                            onClick={(e) => {
+                              setOpenMenuId(null);
+                              handleCancelDeletion(e, blog);
+                            }}
+                            className="flex items-center gap-2.5 w-full px-4 py-3 text-left hover:bg-yellow-600/30 transition-colors text-yellow-400"
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              className="h-4 w-4 shrink-0"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M6 18L18 6M6 6l12 12"
+                              />
+                            </svg>
+                            Cancel ({formatCountdown(remainingSeconds)})
+                          </button>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              setOpenMenuId(null);
+                              handleDelete(e, blog);
+                            }}
+                            disabled={!!blog.deletionRequested}
+                            className={`flex items-center gap-2.5 w-full px-4 py-3 text-left transition-colors ${
+                              blog.deletionRequested
+                                ? "text-yellow-500 opacity-60 cursor-default"
+                                : "text-red-400 hover:bg-red-600/30"
+                            }`}
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              className="h-4 w-4 shrink-0"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                              />
+                            </svg>
+                            {blog.deletionRequested
+                              ? "Deletion Pending"
+                              : "Delete Blog"}
+                          </button>
+                        )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
                 {/* COVER IMAGE */}
                 {displayCoverImage ? (
                   <div className="relative w-full h-48 bg-gray-800">
@@ -533,19 +655,16 @@ export default function BlogsClient() {
                             : "Deletion Requested"}
                         </span>
                       )}
-
                       {blog.isDeletionRejected && (
                         <span className="text-[10px] text-orange-400 font-medium bg-orange-500/10 px-2 py-1 rounded border border-orange-500/30">
                           Deletion Rejected
                         </span>
                       )}
-
                       {blog.isEditPending && (
                         <span className="text-[10px] text-blue-400 font-medium bg-blue-500/10 px-2 py-1 rounded border border-blue-500/30">
                           Edit Under Review
                         </span>
                       )}
-
                       {blog.isEditRejected && (
                         <span className="text-[10px] text-red-400 font-medium bg-red-500/10 px-2 py-1 rounded border border-red-500/30">
                           Edit Rejected
@@ -624,33 +743,26 @@ export default function BlogsClient() {
                       !blog.deletionRequested && (
                         <p>Click to view published blog</p>
                       )}
-
                     {blog.status === "published" && blog.isEditPending && (
                       <p>Edit under review — Click to preview changes</p>
                     )}
-
                     {blog.isEditRejected && (
                       <p>Edit rejected — Click to view live blog or re-edit</p>
                     )}
-
                     {blog.isDeletionRejected && (
                       <p>
                         Deletion rejected — you may re-request or contact admin
                       </p>
                     )}
-
                     {blog.deletionRequested && canCancelDeletion && (
-                      <p>Hover and click ✕ to cancel deletion request</p>
+                      <p>Tap ⋮ to cancel deletion request</p>
                     )}
-
                     {blog.deletionRequested && !canCancelDeletion && (
                       <p>Deletion request sent — awaiting admin review</p>
                     )}
-
                     {blog.status === "pending" && (
                       <p>Awaiting Review - Click to preview</p>
                     )}
-
                     {blog.status === "rejected" && (
                       <p>
                         {blog.adminNotes
@@ -658,7 +770,6 @@ export default function BlogsClient() {
                           : "Rejected"}
                       </p>
                     )}
-
                     {blog.status === "approved" && (
                       <p>Approved - Publishing Soon</p>
                     )}

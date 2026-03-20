@@ -831,134 +831,142 @@ export default function EditBlogPage() {
               )}
 
               <div className="bg-slate-900 border border-gray-800 rounded-md">
-                <div className="flex flex-wrap gap-2 p-2 border-b border-gray-800 text-sm">
-                  <button
-                    onClick={() => wrapSelection("**", "**")}
-                    type="button"
-                    className="px-3 py-1 rounded hover:bg-slate-800 font-bold"
-                  >
-                    B
-                  </button>
-                  <button
-                    onClick={() => wrapSelection("_", "_")}
-                    type="button"
-                    className="px-3 py-1 rounded hover:bg-slate-800 italic"
-                  >
-                    I
-                  </button>
-                  <button
-                    onClick={() => wrapSelection("<u>", "</u>")}
-                    type="button"
-                    className="px-3 py-1 rounded hover:bg-slate-800 underline"
-                  >
-                    U
-                  </button>
-                  <button
-                    onClick={() => wrapSelection("~~", "~~")}
-                    type="button"
-                    className="px-3 py-1 rounded hover:bg-slate-800 line-through"
-                  >
-                    S
-                  </button>
-
-                  <div className="w-px bg-gray-700"></div>
-
-                  <button
-                    onClick={() => handleHeading(1)}
-                    type="button"
-                    className="px-3 py-1 rounded hover:bg-slate-800"
-                  >
-                    H1
-                  </button>
-                  <button
-                    onClick={() => handleHeading(2)}
-                    type="button"
-                    className="px-3 py-1 rounded hover:bg-slate-800"
-                  >
-                    H2
-                  </button>
-                  <button
-                    onClick={() => handleHeading(3)}
-                    type="button"
-                    className="px-3 py-1 rounded hover:bg-slate-800"
-                  >
-                    H3
-                  </button>
-                  <button
-                    onClick={() => handleHeading(4)}
-                    type="button"
-                    className="px-3 py-1 rounded hover:bg-slate-800"
-                  >
-                    H4
-                  </button>
-
-                  <div className="w-px bg-gray-700"></div>
-
-                  <button
-                    onClick={insertBulletList}
-                    type="button"
-                    className="px-3 py-1 rounded hover:bg-slate-800"
-                    title="Bulleted list"
-                  >
-                    •
-                  </button>
-                  <button
-                    onClick={insertNumberedList}
-                    type="button"
-                    className="px-3 py-1 rounded hover:bg-slate-800"
-                    title="Numbered list"
-                  >
-                    1.
-                  </button>
-
-                  <div className="w-px bg-gray-700"></div>
-
-                  <button
-                    onClick={() => wrapSelection("> ")}
-                    type="button"
-                    className="px-3 py-1 rounded hover:bg-slate-800"
-                  >
-                    Quote
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => wrapSelection("```\n", "\n```")}
-                    className="px-3 py-1 rounded hover:bg-slate-800"
-                  >
-                    Code
-                  </button>
-
-                  <div className="w-px bg-gray-700"></div>
-
-                  <button
-                    type="button"
-                    onClick={openInlineImagePicker}
-                    className="px-3 py-1 rounded hover:bg-slate-800 flex items-center gap-1"
-                    title="Insert image"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
+                {/* Toolbar — scrollable single row on mobile, wrapping on desktop */}
+                <div className="overflow-x-auto [&::-webkit-scrollbar]:hidden border-b border-gray-800">
+                  <div className="flex items-center gap-1 p-2 text-sm min-w-max md:min-w-0 md:flex-wrap">
+                    {/* Text formatting */}
+                    <button
+                      onClick={() => wrapSelection("**", "**")}
+                      type="button"
+                      className="px-3 py-1.5 rounded hover:bg-slate-700 font-bold shrink-0"
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                      />
-                    </svg>
-                    Image
-                  </button>
+                      B
+                    </button>
+                    <button
+                      onClick={() => wrapSelection("_", "_")}
+                      type="button"
+                      className="px-3 py-1.5 rounded hover:bg-slate-700 italic shrink-0"
+                    >
+                      I
+                    </button>
+                    <button
+                      onClick={() => wrapSelection("<u>", "</u>")}
+                      type="button"
+                      className="px-3 py-1.5 rounded hover:bg-slate-700 underline shrink-0"
+                    >
+                      U
+                    </button>
+                    <button
+                      onClick={() => wrapSelection("~~", "~~")}
+                      type="button"
+                      className="px-3 py-1.5 rounded hover:bg-slate-700 line-through shrink-0"
+                    >
+                      S
+                    </button>
 
-                  <input
-                    ref={inlineImageInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleInlineImageUpload}
-                    className="hidden"
-                  />
+                    <div className="w-px h-5 bg-gray-700 mx-1 shrink-0" />
+
+                    {/* Headings */}
+                    <button
+                      onClick={() => handleHeading(1)}
+                      type="button"
+                      className="px-3 py-1.5 rounded hover:bg-slate-700 shrink-0"
+                    >
+                      H1
+                    </button>
+                    <button
+                      onClick={() => handleHeading(2)}
+                      type="button"
+                      className="px-3 py-1.5 rounded hover:bg-slate-700 shrink-0"
+                    >
+                      H2
+                    </button>
+                    <button
+                      onClick={() => handleHeading(3)}
+                      type="button"
+                      className="px-3 py-1.5 rounded hover:bg-slate-700 shrink-0"
+                    >
+                      H3
+                    </button>
+                    <button
+                      onClick={() => handleHeading(4)}
+                      type="button"
+                      className="px-3 py-1.5 rounded hover:bg-slate-700 shrink-0"
+                    >
+                      H4
+                    </button>
+
+                    <div className="w-px h-5 bg-gray-700 mx-1 shrink-0" />
+
+                    {/* Lists */}
+                    <button
+                      onClick={insertBulletList}
+                      type="button"
+                      title="Bulleted list"
+                      className="px-3 py-1.5 rounded hover:bg-slate-700 shrink-0"
+                    >
+                      •
+                    </button>
+                    <button
+                      onClick={insertNumberedList}
+                      type="button"
+                      title="Numbered list"
+                      className="px-3 py-1.5 rounded hover:bg-slate-700 shrink-0"
+                    >
+                      1.
+                    </button>
+
+                    <div className="w-px h-5 bg-gray-700 mx-1 shrink-0" />
+
+                    {/* Quote & Code */}
+                    <button
+                      onClick={() => wrapSelection("> ")}
+                      type="button"
+                      className="px-3 py-1.5 rounded hover:bg-slate-700 shrink-0"
+                    >
+                      Quote
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => wrapSelection("```\n", "\n```")}
+                      className="px-3 py-1.5 rounded hover:bg-slate-700 shrink-0"
+                    >
+                      Code
+                    </button>
+
+                    <div className="w-px h-5 bg-gray-700 mx-1 shrink-0" />
+
+                    {/* Inline image */}
+                    <button
+                      type="button"
+                      onClick={openInlineImagePicker}
+                      title="Insert image"
+                      className="px-3 py-1.5 rounded hover:bg-slate-700 flex items-center gap-1 shrink-0"
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                        />
+                      </svg>
+                      Image
+                    </button>
+
+                    <input
+                      ref={inlineImageInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleInlineImageUpload}
+                      className="hidden"
+                    />
+                  </div>
                 </div>
 
                 <textarea

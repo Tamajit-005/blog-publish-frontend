@@ -17,9 +17,9 @@ export default function AboutPage() {
           <Image
             src="/images/Logo.png"
             alt="Logo"
-            width={160}
-            height={50}
-            className="h-10 w-auto"
+            width={220}
+            height={70}
+            className="w-44 h-auto"
             priority
           />
         </div>
@@ -27,31 +27,33 @@ export default function AboutPage() {
         <div className="space-y-6 text-lg leading-relaxed text-gray-400">
           <p>
             <strong className="text-teal-400">Palette Publisher</strong> is a
-            modern digital publication built for developers who value clarity,
-            precision, and practical knowledge. Our goal is simple: deliver
-            high-quality insights that help you build better, faster, and
-            smarter in today’s evolving web ecosystem.
+            modern blogging platform where writers can craft, submit, and share
+            their ideas with the world — with a clean, distraction-free
+            experience at every step.
           </p>
 
           <p>
-            We focus on actionable guidance—covering backend engineering, Strapi
-            workflows, frontend architecture, API design, and the tools shaping
-            modern development. Every piece is crafted to remove noise and
-            highlight what actually matters.
+            Every blog goes through a simple review process to ensure quality
+            and authenticity, so readers always find content worth their time.
+            Writers get a personal space to manage their posts, track status,
+            and iterate freely.
           </p>
 
           <p>
-            Powered by{" "}
-            <span className="text-teal-400 font-medium">Next.js</span> and{" "}
-            <span className="text-teal-400 font-medium">Strapi</span>, Palette
-            Publisher delivers a fast, smooth, and performance-first reading
-            experience designed for developers at every level.
+            Built with{" "}
+            <span className="text-teal-400 font-medium">Next.js</span>,{" "}
+            <span className="text-teal-400 font-medium">MongoDB</span>, and{" "}
+            <span className="text-teal-400 font-medium">Strapi</span>,{" "}
+            <strong className="text-teal-400">Palette Publisher</strong> is
+            designed to be fast, reliable, and straightforward — for both
+            writers and readers.
           </p>
 
           <p>
-            Whether you’re exploring new technologies or refining your workflow,
-            Palette Publisher gives you the clean explanations and practical
-            depth needed to move with confidence.
+            Whether you're sharing your first post or your hundredth,{" "}
+            <strong className="text-teal-400">Palette Publisher</strong> gives
+            you the tools to publish with confidence and reach an audience that
+            cares.
           </p>
         </div>
       </div>
