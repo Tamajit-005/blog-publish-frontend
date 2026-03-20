@@ -4,12 +4,8 @@ import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaSearch, FaTimes, FaBars } from "react-icons/fa";
 
 const Navbar = () => {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
   const [username, setUsername] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
@@ -19,6 +15,7 @@ const Navbar = () => {
   const router = useRouter();
   const profileRef = useRef<HTMLDivElement | null>(null);
 
+  // Fetches user session data on mount
   useEffect(() => {
     fetch("/api/user/username")
       .then((res) => {
@@ -36,10 +33,12 @@ const Navbar = () => {
       .finally(() => setIsLoading(false));
   }, []);
 
+  // Handles user logout
   const handleLogout = () => {
     window.location.href = "/api/auth/custom-logout";
   };
 
+  // Requests a password reset link
   const handleChangePassword = async () => {
     await fetch("/api/auth/reset-password", { method: "POST" });
     setToast("Password reset link sent to your email");
@@ -47,6 +46,7 @@ const Navbar = () => {
     setTimeout(() => setToast(null), 3000);
   };
 
+  // Closes the profile dropdown when clicking outside of it
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (
@@ -61,18 +61,7 @@ const Navbar = () => {
     return () => document.removeEventListener("mousedown", handler);
   }, [profileOpen]);
 
-  useEffect(() => {
-    document.body.style.overflow = menuOpen || searchOpen ? "hidden" : "";
-  }, [menuOpen, searchOpen]);
-
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const q = searchQuery.trim();
-    if (q) router.push(`/search?query=${encodeURIComponent(q)}`);
-    setSearchOpen(false);
-    setMenuOpen(false);
-  };
-
+  // Generates user initials for the avatar
   const getInitials = (name: string | undefined | null) => {
     if (!name) return "U";
     const parts = name.split(" ");
@@ -85,22 +74,19 @@ const Navbar = () => {
   return (
     <header className="bg-[#0f111a] text-white sticky top-0 z-50 shadow-md">
       <div className="max-w-6xl mx-auto flex items-center justify-between p-4">
-
         <Link href="/">
           <img src="/images/Logo.png" alt="Logo" className="h-12 w-auto" />
         </Link>
 
-        <nav className="hidden md:flex items-center gap-6 font-medium">
-          <Link href="/blogs" className="hover:text-teal-400 transition-colors">
+        {/* NAV — same layout for both desktop and mobile */}
+        <nav className="flex items-center gap-4 font-medium">
+          {/* Blogs link — desktop only */}
+          <Link
+            href="/blogs"
+            className="hidden md:inline hover:text-teal-400 transition-colors text-lg"
+          >
             Blogs
           </Link>
-
-          <button
-            onClick={() => setSearchOpen(true)}
-            className="text-xl hover:text-teal-400 transition-colors"
-          >
-            <FaSearch />
-          </button>
 
           {!isLoading && (
             <>
@@ -113,6 +99,7 @@ const Navbar = () => {
                     Create
                   </button>
 
+                  {/* PROFILE AVATAR — same on all screen sizes */}
                   <div className="relative" ref={profileRef}>
                     <button
                       onClick={() => setProfileOpen((prev) => !prev)}
@@ -121,6 +108,7 @@ const Navbar = () => {
                       {getInitials(displayName)}
                     </button>
 
+                    {/* PROFILE DROPDOWN */}
                     <AnimatePresence>
                       {profileOpen && (
                         <motion.div
@@ -179,7 +167,7 @@ const Navbar = () => {
                 <>
                   <Link
                     href="/login"
-                    className="hover:text-teal-400 transition-colors"
+                    className="hover:text-teal-400 transition-colors text-sm"
                   >
                     Login
                   </Link>
@@ -195,15 +183,9 @@ const Navbar = () => {
             </>
           )}
         </nav>
-
-        <button
-          className="md:hidden text-2xl"
-          onClick={() => setMenuOpen((prev) => !prev)}
-        >
-          {menuOpen ? <FaTimes /> : <FaBars />}
-        </button>
       </div>
 
+      {/* TOAST NOTIFICATION */}
       <AnimatePresence>
         {toast && (
           <motion.div

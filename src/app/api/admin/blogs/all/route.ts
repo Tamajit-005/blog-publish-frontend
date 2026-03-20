@@ -5,7 +5,8 @@ import Blog from "@/models/Blog";
 export async function GET() {
   try {
     await dbConnect();
-
+    
+    // Fetch all blogs, sorted by creation date (newest first)
     const blogs = await Blog.find({})
       .sort({ createdAt: -1 })
       .lean();
