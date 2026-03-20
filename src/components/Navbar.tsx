@@ -83,7 +83,7 @@ const Navbar = () => {
           {/* Blogs link — desktop only */}
           <Link
             href="/blogs"
-            className="hidden md:inline hover:text-teal-400 transition-colors text-lg"
+            className="hidden md:inline hover:text-teal-400 transition-colors text-sm font-semibold"
           >
             Blogs
           </Link>
@@ -167,7 +167,7 @@ const Navbar = () => {
                 <>
                   <Link
                     href="/login"
-                    className="hover:text-teal-400 transition-colors text-sm"
+                    className="hover:text-teal-400 transition-colors text-sm font-semibold"
                   >
                     Login
                   </Link>

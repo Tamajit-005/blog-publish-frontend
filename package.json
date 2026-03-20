@@ -10,7 +10,6 @@
     "promote-user": "node scripts/promote-superadmin.js"
   },
   "dependencies": {
-    "@apollo/client": "^4.0.9",
     "@auth0/nextjs-auth0": "^3.8.0",
     "@emailjs/browser": "^4.4.1",
     "auth0": "^5.2.0",
@@ -18,7 +17,6 @@
     "classnames": "^2.5.1",
     "dotenv": "^17.2.3",
     "framer-motion": "^12.23.24",
-    "graphql": "^16.12.0",
     "iron-session": "^8.0.4",
     "js-cookie": "^3.0.5",
     "lucide-react": "^0.552.0",

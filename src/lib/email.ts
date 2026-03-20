@@ -1,16 +1,20 @@
 import { Resend } from "resend";
 
-
 const resend = new Resend(process.env.RESEND_API_KEY);
-
 
 const FROM_EMAIL = "PALETTE Publisher <onboarding@resend.dev>";
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "tamajitsaha05@gmail.com";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
+// Returns hosted logo URL in production; empty string in local dev (falls back to text).
+function getLogoUrl(): string {
+  if (APP_URL && !APP_URL.includes("localhost")) {
+    return `${APP_URL}/images/Logo.png`;
+  }
+  return "";
+}
 
 /* ───────────────── CONTACT FORM ───────────────── */
-
 
 export async function sendContactFormEmail(data: {
   name: string;
@@ -21,11 +25,9 @@ export async function sendContactFormEmail(data: {
     console.log("Sending contact form email to admin...");
     console.log("   From:", data.name, `<${data.email}>`);
 
-
     if (!process.env.RESEND_API_KEY) {
       throw new Error("RESEND_API_KEY is not configured");
     }
-
 
     const response = await resend.emails.send({
       from: FROM_EMAIL,
@@ -140,12 +142,10 @@ export async function sendContactFormEmail(data: {
       `,
     });
 
-
     if (response.error) {
       console.error("Email failed:", response.error);
       throw new Error(response.error.message);
     }
-
 
     console.log("Contact email sent to admin:", response.data?.id);
   } catch (error: any) {
@@ -154,16 +154,13 @@ export async function sendContactFormEmail(data: {
   }
 }
 
-
 /* ───────────────── BLOG WORKFLOW EMAILS ───────────────── */
-
 
 type BlogEmailPayload =
   | { type: "blog_submitted";   blogTitle: string; authorName: string; authorEmail: string; blogId: string; description?: string; submittedAt?: string }
   | { type: "edit_submitted";   blogTitle: string; authorName: string; authorEmail: string; blogId: string; description?: string; submittedAt?: string }
   | { type: "delete_requested"; blogTitle: string; authorName: string; authorEmail: string; blogId: string; description?: string; submittedAt?: string }
   | { type: "delete_cancelled"; blogTitle: string; authorName: string; authorEmail: string; blogId: string; description?: string; submittedAt?: string };
-
 
 function formatIST(iso?: string): string {
   if (!iso) return "—";
@@ -176,7 +173,6 @@ function formatIST(iso?: string): string {
     minute: "2-digit",
   });
 }
-
 
 function buildBody(payload: BlogEmailPayload, accentColor: string): string {
   return `
@@ -234,7 +230,6 @@ function buildBody(payload: BlogEmailPayload, accentColor: string): string {
   `;
 }
 
-
 function adminEmailBase(
   accentColor: string,
   icon: string,
@@ -246,6 +241,8 @@ function adminEmailBase(
   badgeLabel: string,
   badgeBg: string,
 ) {
+  const logoUrl = getLogoUrl();
+
   return `
     <!DOCTYPE html>
     <html lang="en">
@@ -264,14 +261,15 @@ function adminEmailBase(
 
               <!-- Header / Brand bar -->
               <tr>
-                <td style="background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);border-radius:16px 16px 0 0;padding:28px 32px;border-bottom:1px solid #334155;">
+                <td style="background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);border-radius:16px 16px 0 0;padding:24px 32px;border-bottom:1px solid #334155;">
                   <table width="100%" cellpadding="0" cellspacing="0">
                     <tr>
-                      <td>
-                        <p style="margin:0;font-size:22px;font-weight:800;color:#14b8a6;letter-spacing:-0.5px;">
-                          🎨 PALETTE <span style="color:#f1f5f9;font-weight:400;">Publisher</span>
-                        </p>
-                        <p style="margin:4px 0 0 0;font-size:12px;color:#64748b;letter-spacing:0.5px;text-transform:uppercase;">Admin Notification</p>
+                      <td valign="middle">
+                        ${logoUrl
+                          ? `<img src="${logoUrl}" alt="PALETTE Publisher" width="140" style="display:block;height:auto;max-width:140px;" />`
+                          : `<p style="margin:0;font-size:22px;font-weight:800;color:#14b8a6;letter-spacing:-0.5px;">🎨 PALETTE <span style="color:#f1f5f9;font-weight:400;">Publisher</span></p>`
+                        }
+                        <p style="margin:6px 0 0 0;font-size:11px;color:#64748b;letter-spacing:0.8px;text-transform:uppercase;">Admin Notification</p>
                       </td>
                       <td align="right" valign="middle">
                         <span style="display:inline-block;background:${badgeBg};color:#fff;font-size:11px;font-weight:700;padding:5px 12px;border-radius:100px;letter-spacing:0.5px;text-transform:uppercase;">${badgeLabel}</span>
@@ -345,16 +343,13 @@ function adminEmailBase(
   `;
 }
 
-
 export async function sendBlogEmail(payload: BlogEmailPayload) {
   try {
     if (!process.env.RESEND_API_KEY) {
       throw new Error("RESEND_API_KEY is not configured");
     }
 
-
     switch (payload.type) {
-
 
       case "blog_submitted":
         await resend.emails.send({
@@ -370,7 +365,6 @@ export async function sendBlogEmail(payload: BlogEmailPayload) {
         });
         break;
 
-
       case "edit_submitted":
         await resend.emails.send({
           from: FROM_EMAIL,
@@ -384,7 +378,6 @@ export async function sendBlogEmail(payload: BlogEmailPayload) {
           ),
         });
         break;
-
 
       case "delete_requested":
         await resend.emails.send({
@@ -400,7 +393,6 @@ export async function sendBlogEmail(payload: BlogEmailPayload) {
         });
         break;
 
-
       case "delete_cancelled":
         await resend.emails.send({
           from: FROM_EMAIL,
@@ -415,9 +407,7 @@ export async function sendBlogEmail(payload: BlogEmailPayload) {
         });
         break;
 
-
     }
-
 
     console.log(`[Email] Sent: ${payload.type} for "${payload.blogTitle}"`);
   } catch (err: any) {
