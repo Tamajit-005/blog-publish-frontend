@@ -317,7 +317,7 @@ export default function AdminBlogsClient() {
                     >
                       <div className="flex flex-row">
                         {/* COVER IMAGE — small thumbnail on mobile, wide panel on desktop */}
-                        <div className="w-24 h-24 md:w-80 md:h-64 flex-shrink-0">
+                        <div className="w-24 md:w-80 md:h-64 flex-shrink-0 self-stretch">
                           {displayCoverImage ? (
                             <img
                               src={displayCoverImage}

@@ -24,11 +24,6 @@ function insertTextAtCursor(
   el.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
-/* -------------------------------------------------------
-   Reusable styled validation warning.
-   AnimatePresence must wrap this at the call site (not here)
-   so it can observe the child unmounting and play exit animation.
-------------------------------------------------------- */
 function ValidationWarning({ message }: { message: string }) {
   return (
     <motion.div
@@ -44,9 +39,6 @@ function ValidationWarning({ message }: { message: string }) {
   );
 }
 
-/* -------------------------------------------------------
-   Success Modal — styled after the browser confirm dialog
-------------------------------------------------------- */
 function SuccessModal({
   message,
   onOk,
@@ -55,7 +47,6 @@ function SuccessModal({
   onOk: () => void;
 }) {
   return (
-    // Backdrop
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -63,7 +54,6 @@ function SuccessModal({
       transition={{ duration: 0.2 }}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
     >
-      {/* Dialog box */}
       <motion.div
         initial={{ opacity: 0, scale: 0.92, y: 16 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -71,7 +61,6 @@ function SuccessModal({
         transition={{ duration: 0.25, ease: "easeOut" }}
         className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden"
       >
-        {/* Header bar — mimics the browser dialog title bar */}
         <div className="px-5 pt-5 pb-3 border-b border-gray-200">
           <p className="font-bold text-gray-900 text-base">
             {typeof window !== "undefined"
@@ -80,13 +69,9 @@ function SuccessModal({
             says
           </p>
         </div>
-
-        {/* Body */}
         <div className="px-5 py-4">
           <p className="text-gray-700 text-sm leading-relaxed">{message}</p>
         </div>
-
-        {/* Footer buttons */}
         <div className="px-5 pb-5 flex justify-end gap-3">
           <button
             onClick={onOk}
@@ -135,23 +120,20 @@ export default function EditBlogPage() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  // Success modal state
+  // ── Image-specific validation warnings ──────────────────────────
+  const [coverImageError, setCoverImageError] = useState<string | null>(null);
+  const [inlineImageError, setInlineImageError] = useState<string | null>(null);
+
   const [successModal, setSuccessModal] = useState<{
     visible: boolean;
     message: string;
-  }>({
-    visible: false,
-    message: "",
-  });
+  }>({ visible: false, message: "" });
 
-  // Controls whether styled validation warnings are visible.
-  // Set to true on first submit attempt so warnings only appear after the user tries to submit.
   const [showErrors, setShowErrors] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const inlineImageInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Section refs used to scroll to the first invalid field on submit
   const titleRef = useRef<HTMLDivElement>(null);
   const descriptionRef = useRef<HTMLDivElement>(null);
   const categoryRef = useRef<HTMLDivElement>(null);
@@ -194,7 +176,6 @@ export default function EditBlogPage() {
             setCoverImage(source.coverImage || "");
             setImagePreview(source.coverImage || null);
             setInlineImages(source.inlineImages || []);
-
             imageCounterRef.current = source.inlineImages?.length || 0;
           }
         })
@@ -215,15 +196,18 @@ export default function EditBlogPage() {
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      setMessage("❌ Please select a valid image file");
+      setCoverImageError("Please select a valid image file.");
       return;
     }
 
     const maxSize = 2 * 1024 * 1024;
     if (file.size > maxSize) {
-      setMessage("❌ Image size must be less than 2MB");
+      setCoverImageError("Image size must be less than 2MB.");
       return;
     }
+
+    // Clear any previous error on successful pick
+    setCoverImageError(null);
 
     const reader = new FileReader();
     reader.onloadend = () => {
@@ -231,9 +215,8 @@ export default function EditBlogPage() {
       const withName = injectFilenameToDataUrl(rawBase64, file.name);
       setCoverImage(withName);
       setImagePreview(withName);
-      setMessage(null);
     };
-    reader.onerror = () => setMessage("❌ Failed to read image file");
+    reader.onerror = () => setCoverImageError("Failed to read image file.");
     reader.readAsDataURL(file);
   };
 
@@ -242,15 +225,18 @@ export default function EditBlogPage() {
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      setMessage("❌ Please select a valid image file");
+      setInlineImageError("Please select a valid image file.");
       return;
     }
 
     const maxSize = 2 * 1024 * 1024;
     if (file.size > maxSize) {
-      setMessage("❌ Image size must be less than 2MB");
+      setInlineImageError("Image size must be less than 2MB.");
       return;
     }
+
+    // Clear any previous error on successful pick
+    setInlineImageError(null);
 
     const reader = new FileReader();
     reader.onloadend = () => {
@@ -273,9 +259,8 @@ export default function EditBlogPage() {
 
       insertTextAtCursor(el, placeholder, 0);
       setContent(el.value);
-      setMessage(null);
     };
-    reader.onerror = () => setMessage("❌ Failed to read image file");
+    reader.onerror = () => setInlineImageError("Failed to read image file.");
     reader.readAsDataURL(file);
 
     e.target.value = "";
@@ -286,11 +271,9 @@ export default function EditBlogPage() {
   const clearImage = () => {
     setCoverImage("");
     setImagePreview(null);
+    setCoverImageError(null);
   };
 
-  /* -------------------------------------------------------
-     Validation helpers — mirror Mongoose schema constraints
-  ------------------------------------------------------- */
   function getTitleError(): string | null {
     if (title.trim().length === 0) return "Please fill in this field.";
     if (title.trim().length < 10)
@@ -318,16 +301,12 @@ export default function EditBlogPage() {
     return null;
   }
 
-  /* -------------------------------------------------------
-     Submit Edits
-  ------------------------------------------------------- */
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!user) return setMessage("You must be logged in to edit a blog.");
 
     setShowErrors(true);
 
-    // Scroll to the first invalid field
     const firstErrorRef = getTitleError()
       ? titleRef
       : getDescriptionError()
@@ -382,7 +361,6 @@ export default function EditBlogPage() {
 
       if (!res.ok) throw new Error(data.error || "Failed to update blog");
 
-      // Show the custom success modal instead of inline message
       setSuccessModal({
         visible: true,
         message: data.isEditPending
@@ -523,10 +501,6 @@ export default function EditBlogPage() {
 
   return (
     <>
-      {/* -------------------------------------------------------
-          Success Modal — rendered outside the form so it overlays
-          the entire page cleanly
-      ------------------------------------------------------- */}
       <AnimatePresence>
         {successModal.visible && (
           <SuccessModal
@@ -561,7 +535,6 @@ export default function EditBlogPage() {
             </div>
           )}
 
-          {/* noValidate disables browser's own constraint UI so our styled warnings take over */}
           <form
             onSubmit={handleSubmit}
             noValidate
@@ -614,7 +587,7 @@ export default function EditBlogPage() {
               </AnimatePresence>
             </div>
 
-            {/* CATEGORIES */}
+            {/* Categories */}
             <div ref={categoryRef}>
               <label className="block text-sm text-gray-400 mb-2">
                 category ({selectedCategories.length})
@@ -803,6 +776,16 @@ export default function EditBlogPage() {
                   </button>
                 </div>
               )}
+
+              {/* ── Cover image warning ── */}
+              <AnimatePresence>
+                {coverImageError && (
+                  <ValidationWarning
+                    key="cover-img-err"
+                    message={coverImageError}
+                  />
+                )}
+              </AnimatePresence>
             </div>
 
             {/* Markdown Editor */}
@@ -831,10 +814,9 @@ export default function EditBlogPage() {
               )}
 
               <div className="bg-slate-900 border border-gray-800 rounded-md">
-                {/* Toolbar — scrollable single row on mobile, wrapping on desktop */}
+                {/* Toolbar */}
                 <div className="overflow-x-auto [&::-webkit-scrollbar]:hidden border-b border-gray-800">
                   <div className="flex items-center gap-1 p-2 text-sm min-w-max md:min-w-0 md:flex-wrap">
-                    {/* Text formatting */}
                     <button
                       onClick={() => wrapSelection("**", "**")}
                       type="button"
@@ -866,7 +848,6 @@ export default function EditBlogPage() {
 
                     <div className="w-px h-5 bg-gray-700 mx-1 shrink-0" />
 
-                    {/* Headings */}
                     <button
                       onClick={() => handleHeading(1)}
                       type="button"
@@ -898,7 +879,6 @@ export default function EditBlogPage() {
 
                     <div className="w-px h-5 bg-gray-700 mx-1 shrink-0" />
 
-                    {/* Lists */}
                     <button
                       onClick={insertBulletList}
                       type="button"
@@ -918,7 +898,6 @@ export default function EditBlogPage() {
 
                     <div className="w-px h-5 bg-gray-700 mx-1 shrink-0" />
 
-                    {/* Quote & Code */}
                     <button
                       onClick={() => wrapSelection("> ")}
                       type="button"
@@ -936,7 +915,6 @@ export default function EditBlogPage() {
 
                     <div className="w-px h-5 bg-gray-700 mx-1 shrink-0" />
 
-                    {/* Inline image */}
                     <button
                       type="button"
                       onClick={openInlineImagePicker}
@@ -986,6 +964,17 @@ export default function EditBlogPage() {
                   className="w-full p-4 h-72 bg-slate-900 text-gray-100 resize-vertical rounded-b-md outline-none font-mono text-sm"
                 />
               </div>
+
+              {/* ── Inline image warning ── */}
+              <AnimatePresence>
+                {inlineImageError && (
+                  <ValidationWarning
+                    key="inline-img-err"
+                    message={inlineImageError}
+                  />
+                )}
+              </AnimatePresence>
+
               <AnimatePresence>
                 {showErrors && getContentError() && (
                   <ValidationWarning
