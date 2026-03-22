@@ -1,11 +1,5 @@
 declare module "*.css";
-import mongoose from "mongoose";
-
-declare global {
-  var mongooseCache: {
-    conn: typeof mongoose | null;
-    promise: Promise<typeof mongoose> | null;
-  } | undefined;
+declare module "*.module.css" {
+  const classes: { [key: string]: string };
+  export default classes;
 }
-
-export {};

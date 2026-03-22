@@ -6,45 +6,87 @@ import User from "@/models/User";
 import crypto from "crypto";
 
 const STRAPI_URL = process.env.STRAPI_URL!;
+// Reuse the existing STRAPI_API_TOKEN as the admin token for password resets
+const STRAPI_ADMIN_TOKEN = process.env.STRAPI_API_TOKEN!;
 const MAX_CONTENT_CHARS = 100_000;
 
 /* ───────────────── HELPERS ───────────────── */
 
 /*
- * Login to Strapi if credentials already exist in MongoDB.
- * Otherwise register once, store password in MongoDB, and reuse forever.
+ * Self-healing login/register flow:
+ *
+ * 1. Try login with stored/generated password
+ * 2. If stored credentials fail → reset password via Strapi admin API token
+ * 3. If admin reset fails (user was deleted) → clear stale record and re-register
+ * 4. If no stored credentials → register fresh
  */
-async function loginOrRegister(
-  user: any
-): Promise<{ jwt: string }> {
+async function loginOrRegister(user: any): Promise<{ jwt: string }> {
   let password = user.strapi?.password;
 
-  // Generate password only once
   if (!password) {
     password = crypto.randomBytes(24).toString("hex");
   }
 
-  // Try login first
-  let res = await fetch(`${STRAPI_URL}/api/auth/local`, {
+  // ── Step 1: Try login with stored/generated password ──
+  let loginRes = await fetch(`${STRAPI_URL}/api/auth/local`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      identifier: user.email,
-      password,
-    }),
+    body: JSON.stringify({ identifier: user.email, password }),
   });
 
-  if (res.ok) {
-    return res.json();
+  if (loginRes.ok) {
+    return loginRes.json();
   }
 
-  // If password already existed but login failed → hard error
-  if (user.strapi?.password) {
-    throw new Error("Stored Strapi credentials are invalid");
+  // ── Step 2: Stored credentials exist but login failed ──
+  // Attempt to reset the password via the Strapi admin API token
+  if (user.strapi?.password && user.strapi?.userId) {
+    console.warn(
+      `[Strapi] Login failed for ${user.email} (userId: ${user.strapi.userId}) — attempting admin password reset`
+    );
+
+    const newPassword = crypto.randomBytes(24).toString("hex");
+
+    const resetRes = await fetch(
+      `${STRAPI_URL}/api/users/${user.strapi.userId}`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${STRAPI_ADMIN_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ password: newPassword }),
+      }
+    );
+
+    if (resetRes.ok) {
+      // Retry login with the new password
+      const retryRes = await fetch(`${STRAPI_URL}/api/auth/local`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: user.email, password: newPassword }),
+      });
+
+      if (retryRes.ok) {
+        // Persist the new password back to MongoDB
+        user.strapi.password = newPassword;
+        await user.save();
+        console.info(`[Strapi] Password reset successful for ${user.email}`);
+        return retryRes.json();
+      }
+    }
+
+    // ── Step 3: Admin reset failed — user was deleted from Strapi ──
+    // Clear the stale strapi record and fall through to re-register
+    console.warn(
+      `[Strapi] Admin reset failed for userId ${user.strapi.userId} — user likely deleted from Strapi. Re-registering.`
+    );
+    user.strapi = undefined;
+    password = crypto.randomBytes(24).toString("hex");
   }
 
-  // Register new Strapi user
-  res = await fetch(`${STRAPI_URL}/api/auth/local/register`, {
+  // ── Step 4: Register fresh Strapi user ──
+  const registerRes = await fetch(`${STRAPI_URL}/api/auth/local/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -54,19 +96,23 @@ async function loginOrRegister(
     }),
   });
 
-  if (!res.ok) {
-    throw new Error(`Strapi register failed: ${await res.text()}`);
+  if (!registerRes.ok) {
+    const errText = await registerRes.text();
+    throw new Error(`Strapi register failed: ${errText}`);
   }
 
-  const data = await res.json();
+  const data = await registerRes.json();
 
-  // Persist Strapi credentials in MongoDB
+  // Persist new Strapi credentials to MongoDB
   user.strapi = {
     userId: data.user?.id,
     password,
   };
-
   await user.save();
+
+  console.info(
+    `[Strapi] Registered new Strapi user for ${user.email} (userId: ${data.user?.id})`
+  );
 
   return data;
 }
@@ -78,7 +124,10 @@ function sanitizeHtmlDataSrc(content: string) {
 
 /* Remove any stray markdown images that still point to data: URIs */
 function removeStrayMarkdownBase64(content: string) {
-  return content.replace(/!\[([^\]]*)\]\((data:[^)]+)\)/g, "![image removed]");
+  return content.replace(
+    /!\[([^\]]*)\]\((data:[^)]+)\)/g,
+    "![image removed]"
+  );
 }
 
 async function resolveCategoryIds(slugs: string[], jwt: string) {
@@ -86,9 +135,7 @@ async function resolveCategoryIds(slugs: string[], jwt: string) {
 
   for (const slug of slugs) {
     const res = await fetch(
-      `${STRAPI_URL}/api/categories?filters[slug][$eq]=${encodeURIComponent(
-        slug
-      )}`,
+      `${STRAPI_URL}/api/categories?filters[slug][$eq]=${encodeURIComponent(slug)}`,
       { headers: { Authorization: `Bearer ${jwt}` } }
     );
 
@@ -139,8 +186,7 @@ function extractFileUrl(fileObj: any): string | null {
   if (typeof fileObj === "string") url = fileObj;
   if (!url && fileObj.url) url = fileObj.url;
   if (!url && fileObj.attributes?.url) url = fileObj.attributes.url;
-  if (!url && fileObj.data?.attributes?.url)
-    url = fileObj.data.attributes.url;
+  if (!url && fileObj.data?.attributes?.url) url = fileObj.data.attributes.url;
 
   if (!url) return null;
 
@@ -237,7 +283,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Author not found" }, { status: 404 });
     }
 
-    /* STEP 1: LOGIN / REGISTER STRAPI USER */
+    /* STEP 1: LOGIN / REGISTER STRAPI USER (self-healing) */
     const { jwt } = await loginOrRegister(user);
 
     /* STEP 2: CONTENT + INLINE IMAGES */
@@ -252,11 +298,7 @@ export async function POST(req: NextRequest) {
         const filename = filenameFromBase64(img.base64, img.id);
 
         try {
-          const uploaded = await uploadInlineImage(
-            img.base64,
-            filename,
-            jwt
-          );
+          const uploaded = await uploadInlineImage(img.base64, filename, jwt);
           const url = extractFileUrl(uploaded);
           if (url) {
             content = content.split(img.placeholder).join(`![image](${url})`);
@@ -312,6 +354,10 @@ export async function POST(req: NextRequest) {
     blog.status = "published";
     blog.strapiId = created.data.id;
     blog.publishedAt = new Date();
+    blog.adminNotes = undefined;
+    blog.rejectedAt = undefined;
+    blog.content = content;
+    blog.inlineImages = []; // Clear base64 inline images after upload to Strapi
     await blog.save();
 
     return NextResponse.json({

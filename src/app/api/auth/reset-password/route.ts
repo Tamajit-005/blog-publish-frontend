@@ -5,7 +5,7 @@ import { sessionOptions, SessionData } from "@/lib/session";
 
 export async function POST(req: NextRequest) {
   try {
-    // 🔐 Read session
+    // Read session
     const cookieStore = await cookies();
     const session = await getIronSession<SessionData>(
       cookieStore,
@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
 
     const email = session.user?.email;
 
-    // 🔒 Security: always return success
+    // Security: always return success
     if (!email) {
       return NextResponse.json({
         success: true,
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 🔁 Trigger Auth0 reset password email
+    // Trigger Auth0 reset password email
     await fetch(
       `${process.env.AUTH0_ISSUER_BASE_URL}/dbconnections/change_password`,
       {
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
       }
     );
 
-    // ✅ Always respond with success
+    // Always respond with success
     return NextResponse.json({
       success: true,
       message:
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("Reset password error:", error);
 
-    // 🔒 Still return success (avoid account enumeration)
+    // Security: still return success (avoid account enumeration)
     return NextResponse.json({
       success: true,
       message:

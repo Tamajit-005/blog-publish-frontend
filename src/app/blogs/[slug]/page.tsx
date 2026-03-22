@@ -29,6 +29,14 @@ interface BlogPost {
   writer?: { username: string; email?: string };
 }
 
+// Rejection metadata fetched from MongoDB via my-blogs
+interface RejectionMeta {
+  isDeletionRejected?: boolean;
+  deletionRejectedNotes?: string;
+  isEditRejected?: boolean;
+  adminNotes?: string;
+}
+
 const handleCopyCode = async (code: string) => {
   try {
     await navigator.clipboard.writeText(code);
@@ -48,6 +56,7 @@ export default function PublishedBlogPage() {
   }, [params]);
 
   const [post, setPost] = useState<BlogPost | null>(null);
+  const [rejectionMeta, setRejectionMeta] = useState<RejectionMeta>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,6 +95,23 @@ export default function PublishedBlogPage() {
             email: fetched.author?.email ?? null,
           },
         });
+
+        // Fetch MongoDB metadata to get rejection fields for this slug
+        const myRes = await fetch("/api/blogs/my-blogs");
+        if (myRes.ok) {
+          const myData = await myRes.json();
+          const match = (myData.blogs ?? []).find(
+            (b: any) => b.slug === fetched.slug,
+          );
+          if (match) {
+            setRejectionMeta({
+              isDeletionRejected: match.isDeletionRejected,
+              deletionRejectedNotes: match.deletionRejectedNotes,
+              isEditRejected: match.isEditRejected,
+              adminNotes: match.adminNotes,
+            });
+          }
+        }
       } catch (err: any) {
         setError(err.message || "Blog not found");
       } finally {
@@ -153,6 +179,33 @@ export default function PublishedBlogPage() {
             PUBLISHED
           </span>
         </motion.div>
+
+        {/* EDIT REJECTION BANNER */}
+        {rejectionMeta.isEditRejected && rejectionMeta.adminNotes && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.28 }}
+            className="mt-4 bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-lg text-sm text-center"
+          >
+            <span className="font-semibold">Edit rejected:</span>{" "}
+            {rejectionMeta.adminNotes}
+          </motion.div>
+        )}
+
+        {/* DELETION REJECTION BANNER */}
+        {rejectionMeta.isDeletionRejected &&
+          rejectionMeta.deletionRejectedNotes && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.28 }}
+              className="mt-4 bg-orange-500/10 border border-orange-500/30 text-orange-400 px-4 py-3 rounded-lg text-sm text-center"
+            >
+              <span className="font-semibold">Deletion rejected:</span>{" "}
+              {rejectionMeta.deletionRejectedNotes}
+            </motion.div>
+          )}
 
         {/* CATEGORIES */}
         {post.category && post.category.length > 0 && (

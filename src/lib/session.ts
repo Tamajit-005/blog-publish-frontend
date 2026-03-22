@@ -6,7 +6,7 @@ export interface SessionData {
     email: string;
     username: string;
 
-    // 🔥 ADD THIS (IMPORTANT)
+    // Optional fields from the OIDC provider
     role?: "user" | "admin" | "superadmin";
 
     name?: string;
@@ -26,7 +26,7 @@ export const sessionOptions: SessionOptions = {
     secure: process.env.NODE_ENV === "production",
     httpOnly: true,
     sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 7, // 7 days
+    maxAge: 60 * 60 * 24 * 10, // 10 days
     path: "/",
   },
 };

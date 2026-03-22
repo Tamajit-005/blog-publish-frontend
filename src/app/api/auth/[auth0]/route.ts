@@ -58,7 +58,7 @@ async function afterCallback(req: NextRequest, session: Session, state: any) {
 
     console.log("✅ Last login updated for:", mongoUser.username);
 
-    // 🍪 CREATE IRON SESSION TO MATCH CUSTOM LOGIN FLOW
+    // CREATE IRON SESSION TO MATCH CUSTOM LOGIN FLOW
     const cookieStore = await cookies();
     const ironSession = await getIronSession<SessionData>(
       cookieStore,

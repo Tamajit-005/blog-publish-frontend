@@ -19,8 +19,8 @@ export default function Footer() {
             />
           </Link>
           <p className="mt-3 text-sm text-gray-400 leading-relaxed">
-            A streamlined platform for publishing, managing, and exploring
-            content — powered by Strapi, GraphQL, and Next.js.
+            A modern publishing platform built with Next.js and Strapi, designed
+            for clarity and creative expression.
           </p>
         </div>
 

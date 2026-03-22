@@ -3,13 +3,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FaSearch, FaTimes, FaBars } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 
 const Navbar = () => {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
   const [username, setUsername] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
@@ -65,20 +61,6 @@ const Navbar = () => {
     return () => document.removeEventListener("mousedown", handler);
   }, [profileOpen]);
 
-  // Disables background scrolling when modals are open
-  useEffect(() => {
-    document.body.style.overflow = menuOpen || searchOpen ? "hidden" : "";
-  }, [menuOpen, searchOpen]);
-
-  // Submits the search query
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const q = searchQuery.trim();
-    if (q) router.push(`/search?query=${encodeURIComponent(q)}`);
-    setSearchOpen(false);
-    setMenuOpen(false);
-  };
-
   // Generates user initials for the avatar
   const getInitials = (name: string | undefined | null) => {
     if (!name) return "U";
@@ -96,17 +78,15 @@ const Navbar = () => {
           <img src="/images/Logo.png" alt="Logo" className="h-12 w-auto" />
         </Link>
 
-        <nav className="hidden md:flex items-center gap-6 font-medium">
-          <Link href="/blogs" className="hover:text-teal-400 transition-colors">
+        {/* NAV — same layout for both desktop and mobile */}
+        <nav className="flex items-center gap-4 font-medium">
+          {/* Blogs link — desktop only */}
+          <Link
+            href="/blogs"
+            className="hidden md:inline hover:text-teal-400 transition-colors text-sm font-semibold"
+          >
             Blogs
           </Link>
-
-          <button
-            onClick={() => setSearchOpen(true)}
-            className="text-xl hover:text-teal-400 transition-colors"
-          >
-            <FaSearch />
-          </button>
 
           {!isLoading && (
             <>
@@ -119,6 +99,7 @@ const Navbar = () => {
                     Create
                   </button>
 
+                  {/* PROFILE AVATAR — same on all screen sizes */}
                   <div className="relative" ref={profileRef}>
                     <button
                       onClick={() => setProfileOpen((prev) => !prev)}
@@ -127,6 +108,7 @@ const Navbar = () => {
                       {getInitials(displayName)}
                     </button>
 
+                    {/* PROFILE DROPDOWN */}
                     <AnimatePresence>
                       {profileOpen && (
                         <motion.div
@@ -152,15 +134,16 @@ const Navbar = () => {
                             Your Posts
                           </Link>
 
-                          {user?.role && ["admin", "superadmin"].includes(user.role) && (
-                            <Link
-                              href="/admin/blogs"
-                              onClick={() => setProfileOpen(false)}
-                              className="block px-4 py-2 text-white hover:bg-yellow-700 transition"
-                            >
-                              Pending Blogs
-                            </Link>
-                          )}
+                          {user?.role &&
+                            ["admin", "superadmin"].includes(user.role) && (
+                              <Link
+                                href="/admin/blogs"
+                                onClick={() => setProfileOpen(false)}
+                                className="block px-4 py-2 text-white hover:bg-yellow-700 transition"
+                              >
+                                Pending Blogs
+                              </Link>
+                            )}
 
                           <button
                             onClick={handleChangePassword}
@@ -184,10 +167,11 @@ const Navbar = () => {
                 <>
                   <Link
                     href="/login"
-                    className="hover:text-teal-400 transition-colors"
+                    className="hover:text-teal-400 transition-colors text-sm font-semibold"
                   >
                     Login
                   </Link>
+
                   <Link
                     href="/signup"
                     className="bg-teal-600 hover:bg-teal-500 px-4 py-2 rounded-md text-sm font-semibold text-white transition"
@@ -199,15 +183,9 @@ const Navbar = () => {
             </>
           )}
         </nav>
-
-        <button
-          className="md:hidden text-2xl"
-          onClick={() => setMenuOpen((prev) => !prev)}
-        >
-          {menuOpen ? <FaTimes /> : <FaBars />}
-        </button>
       </div>
 
+      {/* TOAST NOTIFICATION */}
       <AnimatePresence>
         {toast && (
           <motion.div

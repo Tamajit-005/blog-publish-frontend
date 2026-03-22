@@ -29,16 +29,16 @@ export async function POST(req: NextRequest) {
       }
     );
 
-    // 🔥 DO NOT parse JSON — Auth0 may return text or empty body
+    // DO NOT parse JSON — Auth0 may return text or empty body
     const text = await response.text();
 
-    // 🔍 Optional debug (can remove later)
+    // Optional debug (can remove later)
     console.log("Auth0 forgot-password response:", {
       status: response.status,
       body: text,
     });
 
-    // 🔐 ALWAYS return success (security best practice)
+    // ALWAYS return success (security best practice)
     return NextResponse.json({
       success: true,
       message:
