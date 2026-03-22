@@ -67,7 +67,7 @@ export function PaginationLink({
         isActive
           ? "bg-teal-500 text-gray-900 border border-teal-400 shadow-sm"
           : "text-gray-400 hover:text-teal-400 hover:bg-gray-800",
-        className
+        className,
       )}
       {...props}
     >
@@ -79,16 +79,21 @@ export function PaginationLink({
 export function PaginationPrevious({
   href,
   className,
+  disabled,
   ...props
 }: {
   href: string;
+  disabled?: boolean;
 } & React.ComponentProps<"a">) {
   return (
     <PaginationLink
       href={href}
       className={cn(
-        "flex items-center gap-1 px-3 text-teal-400 hover:bg-teal-900/30",
-        className
+        "flex items-center gap-1 px-3",
+        disabled
+          ? "text-gray-700 pointer-events-none cursor-not-allowed"
+          : "text-teal-400 hover:bg-teal-900/30",
+        className,
       )}
       {...props}
     >
@@ -101,16 +106,21 @@ export function PaginationPrevious({
 export function PaginationNext({
   href,
   className,
+  disabled,
   ...props
 }: {
   href: string;
+  disabled?: boolean;
 } & React.ComponentProps<"a">) {
   return (
     <PaginationLink
       href={href}
       className={cn(
-        "flex items-center gap-1 px-3 text-teal-400 hover:bg-teal-900/30",
-        className
+        "flex items-center gap-1 px-3",
+        disabled
+          ? "text-gray-700 pointer-events-none cursor-not-allowed"
+          : "text-teal-400 hover:bg-teal-900/30",
+        className,
       )}
       {...props}
     >
@@ -129,7 +139,7 @@ export function PaginationEllipsis({
       aria-hidden
       className={cn(
         "flex w-9 h-9 items-center justify-center text-gray-400",
-        className
+        className,
       )}
       {...props}
     >

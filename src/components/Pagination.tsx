@@ -31,6 +31,7 @@ export default function BlogPagination({
         <PaginationItem>
           <PaginationPrevious
             href="#"
+            disabled={currentPage === 1}
             onClick={(e) => {
               e.preventDefault();
               if (onPageChange && currentPage > 1)
@@ -59,6 +60,7 @@ export default function BlogPagination({
         <PaginationItem>
           <PaginationNext
             href="#"
+            disabled={currentPage === totalPages}
             onClick={(e) => {
               e.preventDefault();
               if (onPageChange && currentPage < totalPages)

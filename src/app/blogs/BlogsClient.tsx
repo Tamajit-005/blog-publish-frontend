@@ -54,7 +54,7 @@ export default function BlogsClient() {
   const [blogs, setBlogs] = useState<Blog[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [countdowns, setCountdowns] = useState<Record<string, number>>({});
-  // Tracks which card's kebab menu is open on mobile
+  // openMenuId tracks which blog's kebab menu is open on mobile (if any)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   const pendingDeletions = useRef<Map<string, ReturnType<typeof setTimeout>>>(
@@ -222,7 +222,13 @@ export default function BlogsClient() {
 
     if (!confirm("Are you sure you want to delete this blog?")) return;
 
-    setBlogs((prev) => (prev ? prev.filter((b) => b._id !== blog._id) : []));
+    // Optimistically remove the blog and reset page if current page becomes empty
+    setBlogs((prev) => {
+      const updated = prev ? prev.filter((b) => b._id !== blog._id) : [];
+      const newTotalPages = Math.ceil(updated.length / POSTS_PER_PAGE);
+      if (currentPage > newTotalPages) setCurrentPage(1);
+      return updated;
+    });
 
     let undone = false;
 
@@ -375,12 +381,15 @@ export default function BlogsClient() {
             blog.deletionRequested && remainingSeconds > 0;
 
           return (
+            // ── h-full ensures the wrapper fills the grid cell height ──
             <motion.div
               key={blog._id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
+              className="h-full"
             >
+              {/* ── h-full makes every card stretch to match the tallest in the row ── */}
               <div
                 onClick={() => {
                   if (openMenuId === blog._id) return; // don't navigate if menu is open
@@ -390,7 +399,7 @@ export default function BlogsClient() {
                     router.push(`/blogs/my/${blog._id}`);
                   }
                 }}
-                className="group block bg-gray-900 border border-gray-800 rounded-xl overflow-hidden hover:scale-[1.02] hover:border-teal-500 transition-all duration-300 cursor-pointer relative"
+                className="group h-full flex flex-col bg-gray-900 border border-gray-800 rounded-xl overflow-hidden hover:scale-[1.02] hover:border-teal-500 transition-all duration-300 cursor-pointer relative"
               >
                 {/* ── DESKTOP: hover-reveal button strip ── */}
                 <div className="absolute top-3 right-3 z-20 hidden md:flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -613,7 +622,7 @@ export default function BlogsClient() {
 
                 {/* COVER IMAGE */}
                 {displayCoverImage ? (
-                  <div className="relative w-full h-48 bg-gray-800">
+                  <div className="relative w-full h-48 bg-gray-800 shrink-0">
                     <img
                       src={displayCoverImage}
                       alt={displayTitle}
@@ -621,7 +630,7 @@ export default function BlogsClient() {
                     />
                   </div>
                 ) : (
-                  <div className="w-full h-48 bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
+                  <div className="w-full h-48 shrink-0 bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
                     <svg
                       className="w-16 h-16 text-gray-700"
                       fill="none"
@@ -638,7 +647,7 @@ export default function BlogsClient() {
                   </div>
                 )}
 
-                <div className="p-5">
+                <div className="p-5 flex flex-col flex-1">
                   {/* STATUS ROW */}
                   <div className="flex justify-between items-start mb-3">
                     <span
@@ -702,8 +711,8 @@ export default function BlogsClient() {
                     {displayTitle}
                   </h2>
 
-                  {/* DESCRIPTION */}
-                  <p className="text-gray-400 text-sm line-clamp-3 mb-3">
+                  {/* DESCRIPTION — clamped to 1 line so cards stay uniform */}
+                  <p className="text-gray-400 text-sm line-clamp-1 mb-3">
                     {displayDescription || "No description."}
                   </p>
 
@@ -734,8 +743,8 @@ export default function BlogsClient() {
                     })}
                   </div>
 
-                  {/* STATUS MESSAGE */}
-                  <div className="text-sm text-gray-500 flex flex-col gap-1">
+                  {/* STATUS MESSAGE — pushed to bottom of card */}
+                  <div className="mt-auto text-sm text-gray-500 flex flex-col gap-1">
                     {blog.status === "published" &&
                       !blog.isEditPending &&
                       !blog.isEditRejected &&
