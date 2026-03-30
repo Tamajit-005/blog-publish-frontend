@@ -589,7 +589,7 @@ export default function BlogsClient() {
                             className={`flex items-center gap-2.5 w-full px-4 py-3 text-left transition-colors ${
                               blog.deletionRequested
                                 ? "text-yellow-500 opacity-60 cursor-default"
-                                : "text-red-400 hover:bg-red-600/30"
+                                : "text-red-400"
                             }`}
                           >
                             <svg

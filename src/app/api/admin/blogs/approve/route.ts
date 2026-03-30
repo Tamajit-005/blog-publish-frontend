@@ -6,20 +6,11 @@ import User from "@/models/User";
 import crypto from "crypto";
 
 const STRAPI_URL = process.env.STRAPI_URL!;
-// Reuse the existing STRAPI_API_TOKEN as the admin token for password resets
 const STRAPI_ADMIN_TOKEN = process.env.STRAPI_API_TOKEN!;
 const MAX_CONTENT_CHARS = 100_000;
 
 /* ───────────────── HELPERS ───────────────── */
 
-/*
- * Self-healing login/register flow:
- *
- * 1. Try login with stored/generated password
- * 2. If stored credentials fail → reset password via Strapi admin API token
- * 3. If admin reset fails (user was deleted) → clear stale record and re-register
- * 4. If no stored credentials → register fresh
- */
 async function loginOrRegister(user: any): Promise<{ jwt: string }> {
   let password = user.strapi?.password;
 
@@ -27,7 +18,6 @@ async function loginOrRegister(user: any): Promise<{ jwt: string }> {
     password = crypto.randomBytes(24).toString("hex");
   }
 
-  // ── Step 1: Try login with stored/generated password ──
   let loginRes = await fetch(`${STRAPI_URL}/api/auth/local`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -38,8 +28,6 @@ async function loginOrRegister(user: any): Promise<{ jwt: string }> {
     return loginRes.json();
   }
 
-  // ── Step 2: Stored credentials exist but login failed ──
-  // Attempt to reset the password via the Strapi admin API token
   if (user.strapi?.password && user.strapi?.userId) {
     console.warn(
       `[Strapi] Login failed for ${user.email} (userId: ${user.strapi.userId}) — attempting admin password reset`
@@ -60,7 +48,6 @@ async function loginOrRegister(user: any): Promise<{ jwt: string }> {
     );
 
     if (resetRes.ok) {
-      // Retry login with the new password
       const retryRes = await fetch(`${STRAPI_URL}/api/auth/local`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -68,7 +55,6 @@ async function loginOrRegister(user: any): Promise<{ jwt: string }> {
       });
 
       if (retryRes.ok) {
-        // Persist the new password back to MongoDB
         user.strapi.password = newPassword;
         await user.save();
         console.info(`[Strapi] Password reset successful for ${user.email}`);
@@ -76,8 +62,6 @@ async function loginOrRegister(user: any): Promise<{ jwt: string }> {
       }
     }
 
-    // ── Step 3: Admin reset failed — user was deleted from Strapi ──
-    // Clear the stale strapi record and fall through to re-register
     console.warn(
       `[Strapi] Admin reset failed for userId ${user.strapi.userId} — user likely deleted from Strapi. Re-registering.`
     );
@@ -85,7 +69,6 @@ async function loginOrRegister(user: any): Promise<{ jwt: string }> {
     password = crypto.randomBytes(24).toString("hex");
   }
 
-  // ── Step 4: Register fresh Strapi user ──
   const registerRes = await fetch(`${STRAPI_URL}/api/auth/local/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -103,7 +86,6 @@ async function loginOrRegister(user: any): Promise<{ jwt: string }> {
 
   const data = await registerRes.json();
 
-  // Persist new Strapi credentials to MongoDB
   user.strapi = {
     userId: data.user?.id,
     password,
@@ -117,38 +99,6 @@ async function loginOrRegister(user: any): Promise<{ jwt: string }> {
   return data;
 }
 
-/* Safety net for legacy base64 and stray HTML data src attributes */
-function sanitizeHtmlDataSrc(content: string) {
-  return content.replace(/src=["']data:[^"']+["']/g, "");
-}
-
-/* Remove any stray markdown images that still point to data: URIs */
-function removeStrayMarkdownBase64(content: string) {
-  return content.replace(
-    /!\[([^\]]*)\]\((data:[^)]+)\)/g,
-    "![image removed]"
-  );
-}
-
-async function resolveCategoryIds(slugs: string[], jwt: string) {
-  const ids: number[] = [];
-
-  for (const slug of slugs) {
-    const res = await fetch(
-      `${STRAPI_URL}/api/categories?filters[slug][$eq]=${encodeURIComponent(slug)}`,
-      { headers: { Authorization: `Bearer ${jwt}` } }
-    );
-
-    if (!res.ok) continue;
-
-    const json = await res.json();
-    if (json.data?.[0]?.id) ids.push(json.data[0].id);
-  }
-
-  return ids;
-}
-
-/* Extract filename from base64 data URL if present */
 function filenameFromBase64(base64?: string, fallback = "image") {
   if (!base64) return `${fallback}.png`;
 
@@ -177,7 +127,6 @@ function filenameFromBase64(base64?: string, fallback = "image") {
   return `${fallback}.${ext}`;
 }
 
-/* Resolve Strapi file URL safely */
 function extractFileUrl(fileObj: any): string | null {
   if (!fileObj) return null;
 
@@ -197,7 +146,6 @@ function extractFileUrl(fileObj: any): string | null {
   return url;
 }
 
-/* ───── Upload COVER image ───── */
 async function uploadCover(
   base64?: string,
   filename?: string,
@@ -227,7 +175,6 @@ async function uploadCover(
   return fileObj?.id ?? null;
 }
 
-/* ───── Upload INLINE image ───── */
 async function uploadInlineImage(
   base64: string,
   filename: string,
@@ -252,6 +199,24 @@ async function uploadInlineImage(
 
   const uploaded = await uploadRes.json();
   return Array.isArray(uploaded) ? uploaded[0] : uploaded;
+}
+
+async function resolveCategoryIds(slugs: string[], jwt: string) {
+  const ids: number[] = [];
+
+  for (const slug of slugs) {
+    const res = await fetch(
+      `${STRAPI_URL}/api/categories?filters[slug][$eq]=${encodeURIComponent(slug)}`,
+      { headers: { Authorization: `Bearer ${jwt}` } }
+    );
+
+    if (!res.ok) continue;
+
+    const json = await res.json();
+    if (json.data?.[0]?.id) ids.push(json.data[0].id);
+  }
+
+  return ids;
 }
 
 /* ───────────────── ROUTE ───────────────── */
@@ -286,10 +251,11 @@ export async function POST(req: NextRequest) {
     /* STEP 1: LOGIN / REGISTER STRAPI USER (self-healing) */
     const { jwt } = await loginOrRegister(user);
 
-    /* STEP 2: CONTENT + INLINE IMAGES */
+    /* STEP 2: CONTENT + INLINE IMAGES
+     * No base64 sanitization — inline images are stored as placeholders in
+     * content and their base64 is kept in blog.inlineImages for MongoDB reads.
+     */
     let content = blog.content || "";
-
-    content = sanitizeHtmlDataSrc(content);
 
     if (Array.isArray(blog.inlineImages)) {
       for (const img of blog.inlineImages) {
@@ -301,6 +267,7 @@ export async function POST(req: NextRequest) {
           const uploaded = await uploadInlineImage(img.base64, filename, jwt);
           const url = extractFileUrl(uploaded);
           if (url) {
+            // Replace placeholder in Strapi content with the uploaded URL
             content = content.split(img.placeholder).join(`![image](${url})`);
           }
         } catch (e) {
@@ -308,8 +275,6 @@ export async function POST(req: NextRequest) {
         }
       }
     }
-
-    content = removeStrayMarkdownBase64(content);
 
     if (content.length > MAX_CONTENT_CHARS) {
       content = content.slice(0, MAX_CONTENT_CHARS);
@@ -350,14 +315,16 @@ export async function POST(req: NextRequest) {
 
     const created = await res.json();
 
-    /* STEP 5: UPDATE MONGO */
+    /* STEP 5: UPDATE MONGO
+     * blog.inlineImages is intentionally kept intact — base64 data is preserved
+     * in MongoDB so the blog can be rendered without hitting Strapi.
+     */
     blog.status = "published";
     blog.strapiId = created.data.id;
     blog.publishedAt = new Date();
     blog.adminNotes = undefined;
     blog.rejectedAt = undefined;
-    blog.content = content;
-    blog.inlineImages = []; // Clear base64 inline images after upload to Strapi
+    // blog.content is NOT overwritten — keep original placeholders for MongoDB reads
     await blog.save();
 
     return NextResponse.json({

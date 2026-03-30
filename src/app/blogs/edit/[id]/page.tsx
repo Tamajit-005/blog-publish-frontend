@@ -39,6 +39,25 @@ function ValidationWarning({ message }: { message: string }) {
   );
 }
 
+// Shows remaining characters; warns when near or at the limit
+function CharCount({ current, max }: { current: number; max: number }) {
+  const remaining = max - current;
+  if (current === 0) return null;
+  const color =
+    remaining === 0
+      ? "text-red-400"
+      : remaining <= 20
+        ? "text-yellow-400"
+        : "text-gray-400";
+  return (
+    <p className={`text-xs mt-1 text-right ${color}`}>
+      {remaining === 0
+        ? `Character limit reached (${max}/${max})`
+        : `${current}/${max}`}
+    </p>
+  );
+}
+
 function SuccessModal({
   message,
   onOk,
@@ -95,6 +114,7 @@ interface InlineImage {
   id: string;
   base64: string;
   placeholder: string;
+  strapiUrl?: string;
 }
 
 export default function EditBlogPage() {
@@ -552,6 +572,8 @@ export default function EditBlogPage() {
                 maxLength={200}
                 className="w-full p-3 rounded-md bg-gray-800 border border-gray-700 focus:border-teal-400 outline-none"
               />
+              {/* Live character counter — warns at 180+, red at 200 */}
+              <CharCount current={title.length} max={200} />
               <AnimatePresence>
                 {showErrors && getTitleError() && (
                   <ValidationWarning
@@ -574,9 +596,8 @@ export default function EditBlogPage() {
                 maxLength={300}
                 className="w-full p-3 rounded-md bg-gray-800 border border-gray-700 focus:border-teal-400 outline-none"
               />
-              <p className="text-xs text-gray-500 mt-1">
-                This will be used as the blog preview/excerpt
-              </p>
+              {/* Live character counter — warns at 280+, red at 300 */}
+              <CharCount current={description.length} max={300} />
               <AnimatePresence>
                 {showErrors && getDescriptionError() && (
                   <ValidationWarning
@@ -813,8 +834,8 @@ export default function EditBlogPage() {
                 </div>
               )}
 
+              {/* Toolbar */}
               <div className="bg-slate-900 border border-gray-800 rounded-md">
-                {/* Toolbar */}
                 <div className="overflow-x-auto [&::-webkit-scrollbar]:hidden border-b border-gray-800">
                   <div className="flex items-center gap-1 p-2 text-sm min-w-max md:min-w-0 md:flex-wrap">
                     <button

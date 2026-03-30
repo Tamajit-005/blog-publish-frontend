@@ -1,23 +1,22 @@
 import mongoose, { Document, Model } from "mongoose";
 
 export interface IBlog extends Document {
-  title: string; // Title of the blog post
-  slug: string; // URL-friendly unique identifier generated from the title
-  content: string; // Main content of the blog post, stored as HTML
-  description: string; // Short summary of the blog post, used for previews and SEO
-  coverImage?: string; // URL of cover image
-  coverImageName?: string; // Original filename of the cover image
-  inlineImages?: { id: string; placeholder: string; base64: string }[]; // Array of inline images with unique ID, placeholder text in content, and base64 data for upload
-  categories: string[]; // Array of categories/tags associated with the blog post
-  author: { auth0Id: string; username: string; email: string }; // Author information including Auth0 ID, username, and email
+  title: string;
+  slug: string;
+  content: string;
+  description: string;
+  coverImage?: string;
+  coverImageName?: string;
+  // strapiUrl: set after first Strapi upload so approve-edit can skip re-upload
+  inlineImages?: { id: string; placeholder: string; base64: string; strapiUrl?: string }[];
+  categories: string[];
+  author: { auth0Id: string; username: string; email: string };
   status: "draft" | "pending" | "approved" | "rejected" | "published";
-  deletionRequested?: boolean; // Flag to indicate if the author has requested deletion of the blog post
-  deletionRequestedAt?: Date; // Timestamp of when the deletion request was made, used to enforce the 10-minute cancellation window
-  isDeletionRejected?: boolean; // Flag to indicate if the deletion request has been rejected by admin
-  isEditPending?: boolean; // Flag to indicate if there is a pending edit awaiting admin approval
-  isEditRejected?: boolean; // Flag to indicate if the pending edit has been rejected by admin
-
-  // If isEditPending is true, this field holds the proposed changes to the blog post that are awaiting admin approval. It has the same structure as the main blog fields, but all are optional since an edit might only change a subset of fields.
+  deletionRequested?: boolean;
+  deletionRequestedAt?: Date;
+  isDeletionRejected?: boolean;
+  isEditPending?: boolean;
+  isEditRejected?: boolean;
   pendingEdit?: {
     title: string;
     slug: string;
@@ -25,17 +24,18 @@ export interface IBlog extends Document {
     description: string;
     coverImage?: string;
     coverImageName?: string;
-    inlineImages?: { id: string; placeholder: string; base64: string }[];
+    // strapiUrl preserved from parent so approve-edit can detect already-uploaded images
+    inlineImages?: { id: string; placeholder: string; base64: string; strapiUrl?: string }[];
     categories: string[];
   };
-  adminNotes?: string; // Admin notes for the blog post, used to communicate reasons for rejection or other feedback to the author
-  deletionRejectedNotes?: string; // Admin notes specifically for rejected deletion requests, used to communicate reasons for rejection to the author
-  strapiId?: number; // Optional field to store the corresponding Strapi ID if the blog is published to Strapi
-  strapiWriterId?: number; // Optional field to store the corresponding Strapi Writer ID if the blog is published to Strapi
-  publishedAt?: Date; // Date when the blog post was published
-  rejectedAt?: Date; // Date when the blog post was rejected
-  createdAt: Date; // Date when the blog post was created
-  updatedAt: Date; // Date when the blog post was last updated
+  adminNotes?: string;
+  deletionRejectedNotes?: string;
+  strapiId?: number;
+  strapiWriterId?: number;
+  publishedAt?: Date;
+  rejectedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 const BlogSchema = new mongoose.Schema<IBlog>(
@@ -51,6 +51,7 @@ const BlogSchema = new mongoose.Schema<IBlog>(
         id: { type: String, required: true },
         placeholder: { type: String, required: true },
         base64: { type: String, required: true },
+        strapiUrl: { type: String }, // Strapi URL stored after first upload to avoid re-uploading unchanged images
       },
     ],
     categories: {
@@ -72,7 +73,7 @@ const BlogSchema = new mongoose.Schema<IBlog>(
       default: "pending",
     },
     deletionRequested: { type: Boolean, default: false },
-    deletionRequestedAt: { type: Date, default: null }, // Timestamp of when the deletion request was made
+    deletionRequestedAt: { type: Date, default: null },
     isDeletionRejected: { type: Boolean, default: false },
     isEditPending: { type: Boolean, default: false },
     isEditRejected: { type: Boolean, default: false },
@@ -83,7 +84,15 @@ const BlogSchema = new mongoose.Schema<IBlog>(
       description: String,
       coverImage: String,
       coverImageName: String,
-      inlineImages: Array,
+      // Strapi URLs preserved from parent so approve-edit can detect already-uploaded images
+      inlineImages: [
+        {
+          id: { type: String, required: true },
+          placeholder: { type: String, required: true },
+          base64: { type: String, required: true },
+          strapiUrl: { type: String },
+        },
+      ],
       categories: [String],
     },
     adminNotes: String,
