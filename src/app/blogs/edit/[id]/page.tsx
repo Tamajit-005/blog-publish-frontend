@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import { FIXED_CATEGORIES } from "@/lib/categories";
 
 function insertTextAtCursor(
   el: HTMLTextAreaElement,
@@ -133,8 +134,8 @@ export default function EditBlogPage() {
   const [inlineImages, setInlineImages] = useState<InlineImage[]>([]);
   const imageCounterRef = useRef(0);
 
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loadingCategories, setLoadingCategories] = useState(true);
+  const [categories] = useState<Category[]>(FIXED_CATEGORIES);
+  const loadingCategories = false;
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -167,17 +168,6 @@ export default function EditBlogPage() {
       })
       .then(setUser)
       .catch(() => router.push("/login"));
-
-    fetch("/api/categories")
-      .then((res) => res.json())
-      .then((data) => {
-        setCategories(data.categories || []);
-        setLoadingCategories(false);
-      })
-      .catch((err) => {
-        console.error("Failed to load categories:", err);
-        setLoadingCategories(false);
-      });
 
     if (id) {
       fetch(`/api/blogs/${id}`)

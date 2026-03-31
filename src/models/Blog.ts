@@ -7,7 +7,7 @@ export interface IBlog extends Document {
   description: string;
   coverImage?: string;
   coverImageName?: string;
-  // strapiUrl: set after first Strapi upload so approve-edit can skip re-upload
+  strapiCoverUrl?: string; // ← NEW: Strapi URL saved after first upload
   inlineImages?: { id: string; placeholder: string; base64: string; strapiUrl?: string }[];
   categories: string[];
   author: { auth0Id: string; username: string; email: string };
@@ -24,13 +24,13 @@ export interface IBlog extends Document {
     description: string;
     coverImage?: string;
     coverImageName?: string;
-    // strapiUrl preserved from parent so approve-edit can detect already-uploaded images
+    strapiCoverUrl?: string; // ← NEW: preserve across edits
     inlineImages?: { id: string; placeholder: string; base64: string; strapiUrl?: string }[];
     categories: string[];
   };
   adminNotes?: string;
   deletionRejectedNotes?: string;
-  strapiId?: number;
+  strapiId?: string;
   strapiWriterId?: number;
   publishedAt?: Date;
   rejectedAt?: Date;
@@ -46,12 +46,13 @@ const BlogSchema = new mongoose.Schema<IBlog>(
     description: { type: String, required: true, trim: true, minlength: 10, maxlength: 300 },
     coverImage: String,
     coverImageName: String,
+    strapiCoverUrl: String, // ← NEW
     inlineImages: [
       {
         id: { type: String, required: true },
         placeholder: { type: String, required: true },
         base64: { type: String, required: true },
-        strapiUrl: { type: String }, // Strapi URL stored after first upload to avoid re-uploading unchanged images
+        strapiUrl: { type: String },
       },
     ],
     categories: {
@@ -84,7 +85,7 @@ const BlogSchema = new mongoose.Schema<IBlog>(
       description: String,
       coverImage: String,
       coverImageName: String,
-      // Strapi URLs preserved from parent so approve-edit can detect already-uploaded images
+      strapiCoverUrl: String, // ← NEW
       inlineImages: [
         {
           id: { type: String, required: true },
@@ -97,7 +98,7 @@ const BlogSchema = new mongoose.Schema<IBlog>(
     },
     adminNotes: String,
     deletionRejectedNotes: String,
-    strapiId: Number,
+    strapiId: String,
     strapiWriterId: Number,
     publishedAt: Date,
     rejectedAt: Date,

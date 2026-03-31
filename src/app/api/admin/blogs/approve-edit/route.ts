@@ -4,6 +4,7 @@ import dbConnect from "@/lib/mongoose";
 import Blog from "@/models/Blog";
 import User from "@/models/User";
 import crypto from "crypto";
+import { FIXED_CATEGORIES } from "@/lib/categories";
 
 const STRAPI_URL = process.env.STRAPI_URL!.replace(/\/$/, "");
 const MAX_CONTENT_CHARS = 100000;
@@ -82,7 +83,11 @@ async function uploadInlineImage(base64: string, filename: string, jwt: string) 
   return Array.isArray(uploaded) ? uploaded[0] : uploaded;
 }
 
-async function uploadCover(base64: string, filename: string, jwt: string): Promise<{ id: number; url: string } | null> {
+async function uploadCover(
+  base64: string,
+  filename: string,
+  jwt: string
+): Promise<{ id: number; url: string } | null> {
   const res = await fetch(base64);
   if (!res.ok) throw new Error("Failed to decode base64 cover image");
   const blob = await res.blob();
@@ -101,46 +106,57 @@ async function uploadCover(base64: string, filename: string, jwt: string): Promi
   return { id: fileObj.id, url };
 }
 
-async function resolveCategoryIds(slugs: string[], jwt: string) {
-  const ids: number[] = [];
-  for (const slug of slugs) {
-    const res = await fetch(
-      `${STRAPI_URL}/api/categories?filters[slug][$eq]=${encodeURIComponent(slug)}`,
-      { headers: { Authorization: `Bearer ${jwt}` } },
-    );
-    if (!res.ok) continue;
-    const json = await res.json();
-    if (json.data?.[0]?.id) ids.push(json.data[0].id);
-  }
-  return ids;
+function resolveCategoryIds(slugs: string[]): number[] {
+  return slugs
+    .map((slug) => FIXED_CATEGORIES.find((c) => c.slug === slug)?.id)
+    .filter((id): id is number => id !== undefined);
 }
 
-async function deleteStrapiFileByUrl(fileUrl: string, jwt: string): Promise<void> {
-  try {
-    const urlPath = new URL(fileUrl).pathname;
-    const fullFilename = urlPath.split("/").pop();
-    if (!fullFilename) return;
+/**
+ * Batch-delete multiple Strapi media files by their URLs.
+ * 1 GET (filters[$in]) + N parallel DELETEs regardless of file count.
+ */
+async function deleteStrapiFilesByUrls(fileUrls: string[], jwt: string): Promise<void> {
+  if (fileUrls.length === 0) return;
 
-    // Strapi hash = filename without extension
-    const hash = fullFilename.replace(/\.[^/.]+$/, "");
-
-    const searchRes = await fetch(
-      `${STRAPI_URL}/api/upload/files?filters[hash][$eq]=${encodeURIComponent(hash)}`,
-      { headers: { Authorization: `Bearer ${jwt}` } },
-    );
-    if (!searchRes.ok) return;
-    const files = await searchRes.json();
-    if (!Array.isArray(files) || files.length === 0) return;
-
-    const fileId = files[0].id;
-    await fetch(`${STRAPI_URL}/api/upload/files/${fileId}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${jwt}` },
-    });
-    console.log(`🗑️ Deleted Strapi file: ${fullFilename}`);
-  } catch (e) {
-    console.warn(`Failed to delete Strapi file by URL "${fileUrl}":`, e);
+  const hashMap = new Map<string, string>();
+  for (const fileUrl of fileUrls) {
+    try {
+      const urlPath = new URL(fileUrl).pathname;
+      const fullFilename = urlPath.split("/").pop();
+      if (!fullFilename) continue;
+      hashMap.set(fullFilename.replace(/\.[^/.]+$/, ""), fileUrl);
+    } catch {
+      console.warn(`Skipping invalid URL: ${fileUrl}`);
+    }
   }
+  if (hashMap.size === 0) return;
+
+  const hashParams = Array.from(hashMap.keys())
+    .map((h, i) => `filters[hash][$in][${i}]=${encodeURIComponent(h)}`)
+    .join("&");
+
+  const searchRes = await fetch(`${STRAPI_URL}/api/upload/files?${hashParams}`, {
+    headers: { Authorization: `Bearer ${jwt}` },
+  });
+  if (!searchRes.ok) {
+    console.warn("Batch file lookup failed:", searchRes.statusText);
+    return;
+  }
+
+  const files: { id: number; hash: string }[] = await searchRes.json();
+  if (!Array.isArray(files) || files.length === 0) return;
+
+  await Promise.all(
+    files.map((file) =>
+      fetch(`${STRAPI_URL}/api/upload/files/${file.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${jwt}` },
+      })
+        .then(() => console.log(`🗑️ Deleted Strapi file id=${file.id} (${file.hash})`))
+        .catch((e) => console.warn(`Failed to delete file id=${file.id}:`, e))
+    )
+  );
 }
 
 export async function POST(req: NextRequest) {
@@ -157,101 +173,88 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No pending edit found" }, { status: 400 });
 
     const user = await User.findOne({ email: blog.author.email }).select("+strapi.password");
-    if (!user) return NextResponse.json({ error: "Author not found" }, { status: 404 });
+    if (!user)
+      return NextResponse.json({ error: "Author not found" }, { status: 404 });
 
     // STEP 1 — Strapi auth
     const jwt = await loginOrRegister(user);
     const edits = blog.pendingEdit;
 
-    // STEP 2 — Build Strapi content (placeholders → Strapi URLs)
-    // strapiContent is used only for the Strapi update payload.
-    // mongoContent keeps original placeholders so getProcessedContent works
-    // when serving the blog directly from MongoDB without Strapi.
-    let strapiContent: string = edits.content || "";
-    strapiContent = sanitizeHtmlDataSrc(strapiContent);
+    // STEP 2 — Identify inline images that need uploading vs already have a URL
+    const needsNewCover =
+      edits.coverImage != null && edits.coverImage !== "" && edits.coverImage.startsWith("data:");
 
-    // Track active inline images to save back to MongoDB
-    const activeInlineImages: any[] = [];
+    const activeImgs = (edits.inlineImages ?? []).filter(
+      (img) =>
+        img?.base64 && img?.placeholder && (edits.content || "").includes(img.placeholder)
+    );
+    const toUploadImgs = activeImgs.filter(
+      (img) => !img.strapiUrl && img.base64?.startsWith("data:")
+    );
 
-    if (Array.isArray(edits.inlineImages)) {
-      for (const img of edits.inlineImages) {
-        if (!img?.base64 || !img?.placeholder) continue;
-
-        // Skip images not referenced in the edited content
-        if (!(edits.content || "").includes(img.placeholder)) continue;
-
-        // FIX: If this image was already uploaded to Strapi in a previous approval,
-        // reuse the existing Strapi URL instead of re-uploading the base64.
-        // img.strapiUrl is set below when first uploaded and persisted to MongoDB.
-        if (img.strapiUrl) {
-          strapiContent = strapiContent.split(img.placeholder).join(`![image](${img.strapiUrl})`);
-          activeInlineImages.push(img);
-          continue;
-        }
-
-        // Not yet uploaded — upload now
-        if (!img.base64.startsWith("data:")) {
-          // Unexpected non-base64, non-strapiUrl value — skip upload, keep as-is
-          activeInlineImages.push(img);
-          continue;
-        }
-
+    // STEP 3 — Parallel: new cover upload + all new inline image uploads
+    const [coverUploadResult, ...inlineUploadResults] = await Promise.all([
+      needsNewCover
+        ? uploadCover(
+            edits.coverImage!,
+            edits.coverImageName || filenameFromBase64(edits.coverImage),
+            jwt
+          )
+        : Promise.resolve(null),
+      ...toUploadImgs.map(async (img) => {
         const filename = filenameFromBase64(img.base64, img.id);
         try {
           const uploaded = await uploadInlineImage(img.base64, filename, jwt);
-          const url = extractFileUrl(uploaded);
-          if (url) {
-            strapiContent = strapiContent.split(img.placeholder).join(`![image](${url})`);
-            // Persist the Strapi URL so future approvals skip re-upload
-            activeInlineImages.push({ ...img, strapiUrl: url });
-          } else {
-            activeInlineImages.push(img);
-          }
+          return { id: img.id as string, url: extractFileUrl(uploaded) };
         } catch (e) {
           console.error("Inline image upload failed for", img.id, e);
-          activeInlineImages.push(img);
+          return { id: img.id as string, url: null as string | null };
         }
+      }),
+    ]);
+
+    // Build a map of newly uploaded inline images: img.id → strapiUrl
+    const uploadedUrlMap = new Map<string, string>();
+    for (const result of inlineUploadResults) {
+      if (result?.url) uploadedUrlMap.set(result.id, result.url);
+    }
+
+    // STEP 4 — Build Strapi content + activeInlineImages list
+    let strapiContent = sanitizeHtmlDataSrc(edits.content || "");
+    const activeInlineImages: any[] = [];
+
+    for (const img of activeImgs) {
+      const strapiUrl = img.strapiUrl || uploadedUrlMap.get(img.id) || null;
+      if (strapiUrl) {
+        strapiContent = strapiContent.split(img.placeholder).join(`![image](${strapiUrl})`);
+        activeInlineImages.push({ ...img, strapiUrl });
+      } else {
+        activeInlineImages.push(img);
       }
     }
 
     strapiContent = removeStrayMarkdownBase64(strapiContent);
-    if (strapiContent.length > MAX_CONTENT_CHARS) strapiContent = strapiContent.slice(0, MAX_CONTENT_CHARS);
+    if (strapiContent.length > MAX_CONTENT_CHARS)
+      strapiContent = strapiContent.slice(0, MAX_CONTENT_CHARS);
 
-    // mongoContent: keep original placeholders, just clean stray raw base64 markdown
-    let mongoContent: string = edits.content || "";
-    mongoContent = removeStrayMarkdownBase64(mongoContent);
+    let mongoContent = removeStrayMarkdownBase64(edits.content || "");
 
-    // STEP 3 — Cover image resolution
-    const oldCoverUrl = blog.coverImage?.startsWith("http") ? blog.coverImage : undefined;
-    let newCoverUrl: string | null = null;
-    let coverRemoved = false;
+    // STEP 5 — Cover resolution
+    const oldCoverUrl = blog.strapiCoverUrl;
+    const newCoverUrl = coverUploadResult?.url ?? null;
+    const newCoverId = coverUploadResult?.id ?? null;
+    const coverRemoved =
+      edits.coverImage === "" || edits.coverImage === null || edits.coverImage === undefined;
 
-    if (edits.coverImage === "" || edits.coverImage === null || edits.coverImage === undefined) {
-      coverRemoved = true;
-    } else if (edits.coverImage.startsWith("data:")) {
-      const uploaded = await uploadCover(
-        edits.coverImage,
-        edits.coverImageName || filenameFromBase64(edits.coverImage),
-        jwt,
-      );
-      if (uploaded) {
-        newCoverUrl = uploaded.url;
-        (edits as any)._uploadedCoverId = uploaded.id;
-      }
-    }
+    // STEP 6 — Category IDs (sync, no API call)
+    const categoryIds = resolveCategoryIds(edits.categories ?? []);
 
-    // STEP 4 — Category IDs
-    const categoryIds = await resolveCategoryIds(edits.categories ?? [], jwt);
+    // STEP 7 — Update Strapi
+    // ← Use blog.strapiId directly — no need to search by slug (saves 1 GET)
+    const strapiDocId = blog.strapiId;
+    if (!strapiDocId)
+      throw new Error("No strapiId stored — cannot update blog in Strapi.");
 
-    // STEP 5 — Find Strapi document ID
-    const findRes = await fetch(
-      `${STRAPI_URL}/api/blogs?filters[slug][$eq]=${encodeURIComponent(blog.slug)}`,
-      { headers: { Authorization: `Bearer ${jwt}` } },
-    );
-    const findData = await findRes.json();
-    const strapiDocId = findData.data?.[0]?.documentId ?? blog.strapiId;
-
-    // STEP 6 — Update Strapi (uses strapiContent with resolved URLs)
     const updatePayload: any = {
       title: edits.title,
       slug: edits.slug,
@@ -260,8 +263,8 @@ export async function POST(req: NextRequest) {
       category: categoryIds,
     };
 
-    if ((edits as any)._uploadedCoverId) {
-      updatePayload.cover = (edits as any)._uploadedCoverId;
+    if (newCoverId) {
+      updatePayload.cover = newCoverId;
     } else if (coverRemoved) {
       updatePayload.cover = null;
     }
@@ -274,55 +277,42 @@ export async function POST(req: NextRequest) {
     if (!strapiUpdate.ok)
       throw new Error("Strapi update failed: " + await strapiUpdate.text());
 
-    // STEP 6.5 — Delete old Strapi media no longer needed
+    // STEP 7.5 — Batch-delete old Strapi media no longer needed
+    const urlsToDelete: string[] = [];
 
-    // Cover: delete old if removed or replaced
-    if ((coverRemoved || newCoverUrl) && oldCoverUrl) {
-      await deleteStrapiFileByUrl(oldCoverUrl, jwt);
-    }
+    if ((coverRemoved || newCoverUrl) && oldCoverUrl) urlsToDelete.push(oldCoverUrl);
 
-    // FIX: Inline image orphan detection — compare strapiUrl values on old vs new
-    // blog.inlineImages holds the previously-saved set (each may have strapiUrl).
-    // activeInlineImages holds the newly-approved set.
-    // Any strapiUrl present in old but absent in new means that image was removed.
     const oldInlineStrapiUrls = new Set<string>(
-      (blog.inlineImages ?? [])
-        .map((img: any) => img.strapiUrl)
-        .filter(Boolean)
+      (blog.inlineImages ?? []).map((img: any) => img.strapiUrl).filter(Boolean)
     );
     const newInlineStrapiUrls = new Set<string>(
-      activeInlineImages
-        .map((img: any) => img.strapiUrl)
-        .filter(Boolean)
+      activeInlineImages.map((img: any) => img.strapiUrl).filter(Boolean)
     );
 
     for (const oldUrl of oldInlineStrapiUrls) {
-      if (!newInlineStrapiUrls.has(oldUrl)) {
-        await deleteStrapiFileByUrl(oldUrl, jwt);
-      }
+      if (!newInlineStrapiUrls.has(oldUrl)) urlsToDelete.push(oldUrl);
     }
 
-    // STEP 7 — Apply edits to MongoDB
+    await deleteStrapiFilesByUrls(urlsToDelete, jwt);
+
+    // STEP 8 — Apply edits to MongoDB
     blog.title = edits.title;
     blog.slug = edits.slug;
     blog.description = edits.description;
-
-    // Save mongoContent (with placeholders) so getProcessedContent works
-    // when serving directly from MongoDB without Strapi
     blog.content = mongoContent;
-
     blog.categories = edits.categories;
-
-    // Keep active inline images in MongoDB (base64 + strapiUrl for future approvals)
     blog.inlineImages = activeInlineImages;
 
     if (coverRemoved) {
       blog.coverImage = undefined;
       blog.coverImageName = undefined;
+      blog.strapiCoverUrl = undefined;
     } else if (newCoverUrl) {
-      blog.coverImage = newCoverUrl;
+      blog.coverImage = edits.coverImage;    // keep base64 in MongoDB
+      blog.strapiCoverUrl = newCoverUrl;     // persist Strapi URL separately
       if (edits.coverImageName) blog.coverImageName = edits.coverImageName;
     }
+    // else: cover unchanged — both fields stay as-is
 
     blog.adminNotes = undefined;
     blog.isEditPending = false;
