@@ -393,11 +393,7 @@ export default function BlogsClient() {
               <div
                 onClick={() => {
                   if (openMenuId === blog._id) return; // don't navigate if menu is open
-                  if (blog.status === "published" && !blog.isEditPending) {
-                    router.push(`/blogs/${blog.slug}`);
-                  } else {
-                    router.push(`/blogs/my/${blog._id}`);
-                  }
+                  router.push(`/blogs/my/${blog._id}`); // navigate to blog details page on click
                 }}
                 className="group h-full flex flex-col bg-gray-900 border border-gray-800 rounded-xl overflow-hidden hover:scale-[1.02] hover:border-teal-500 transition-all duration-300 cursor-pointer relative"
               >
@@ -593,7 +589,7 @@ export default function BlogsClient() {
                             className={`flex items-center gap-2.5 w-full px-4 py-3 text-left transition-colors ${
                               blog.deletionRequested
                                 ? "text-yellow-500 opacity-60 cursor-default"
-                                : "text-red-400 hover:bg-red-600/30"
+                                : "text-red-400"
                             }`}
                           >
                             <svg

@@ -243,7 +243,7 @@ export default function AdminBlogsClient() {
 
           {/* TABS — scrollable on mobile */}
           <div className="overflow-x-auto pb-1">
-            <div className="flex space-x-1 bg-gray-900 p-1 rounded-lg w-max">
+            <div className="flex space-x-1 bg-gray-900 p-1 rounded-lg w-max overflow-hidden">
               {tabs.map((tab) => (
                 <button
                   key={tab.id}
@@ -345,7 +345,7 @@ export default function AdminBlogsClient() {
                           </div>
 
                           {/* DESCRIPTION — hidden on mobile */}
-                          <p className="hidden md:block text-gray-400 mb-3 line-clamp-2">
+                          <p className="hidden md:block text-gray-400 mb-3 truncate">
                             {displayDescription || "No description."}
                           </p>
 

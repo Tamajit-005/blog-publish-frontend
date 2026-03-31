@@ -113,15 +113,8 @@ export default function MyBlogDetailPage() {
               categories: fetched.pendingEdit.categories,
             });
           } else {
-            // No pending edit — fetch live Strapi version
-            const sres = await fetch(`/api/blogs/strapi/${fetched.slug}`);
-            if (!sres.ok) {
-              setBlog(fetched);
-            } else {
-              const sdata = await sres.json();
-              // Merge Strapi content with mongo metadata for rejection fields
-              setBlog({ ...fetched, ...sdata.blog, status: "published" });
-            }
+            // No pending edit — use MongoDB data directly (no Strapi fetch)
+            setBlog(fetched);
           }
         } else {
           setBlog(fetched);
@@ -172,7 +165,7 @@ export default function MyBlogDetailPage() {
 
   const finalContent = getProcessedContent(blog);
 
-  // Use mongoBlog for rejection fields since Strapi merge may overwrite them
+  // Use mongoBlog for rejection fields since blog state may reflect pendingEdit view
   const source = mongoBlog ?? blog;
 
   return (

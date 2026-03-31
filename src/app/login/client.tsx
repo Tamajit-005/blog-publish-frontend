@@ -7,7 +7,6 @@ import { motion } from "framer-motion";
 import { Eye, EyeOff } from "lucide-react";
 
 export default function LoginPage() {
-  // 🔁 CHANGE 1: email → identifier
   const [formData, setFormData] = useState({
     identifier: "",
     password: "",
@@ -29,8 +28,6 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/custom-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-
-        // 🔁 CHANGE 2: send identifier instead of email
         body: JSON.stringify(formData),
       });
 
@@ -83,7 +80,6 @@ export default function LoginPage() {
                 Email or Username
               </label>
 
-              {/* 🔁 CHANGE 3: type="text" + identifier */}
               <input
                 type="text"
                 value={formData.identifier}
