@@ -4,333 +4,222 @@ import dbConnect from "@/lib/mongoose";
 import Blog from "@/models/Blog";
 import User from "@/models/User";
 import crypto from "crypto";
+import { getCachedJwt, setCachedJwt } from "@/lib/strapiJwtCache";
 
 
 const STRAPI_URL = process.env.STRAPI_URL!.replace(/\/$/, "");
 
 
-/* ───────────────── HELPERS ───────────────── */
+async function loginOrRegister(user: any): Promise<string> {
+  const cached = getCachedJwt(user.email);
+  if (cached) return cached;
 
-
-async function loginOrRegister(user: any): Promise<{ jwt: string }> {
   let password = user.strapi?.password;
-
-
-  if (!password) {
-    password = crypto.randomBytes(24).toString("hex");
-  }
-
+  if (!password) password = crypto.randomBytes(24).toString("hex");
 
   let res = await fetch(`${STRAPI_URL}/api/auth/local`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ identifier: user.email, password }),
   });
-
-
-  if (res.ok) return res.json();
-
-
-  if (user.strapi?.password) {
-    throw new Error("Stored Strapi credentials are invalid");
+  if (res.ok) {
+    const data = await res.json();
+    setCachedJwt(user.email, data.jwt);
+    return data.jwt;
   }
 
+  if (user.strapi?.password) throw new Error("Stored Strapi credentials are invalid");
 
   res = await fetch(`${STRAPI_URL}/api/auth/local/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email: user.email, username: user.username, password }),
   });
-
-
-  if (!res.ok) {
-    throw new Error(`Strapi register failed: ${await res.text()}`);
-  }
-
+  if (!res.ok) throw new Error(`Strapi register failed: ${await res.text()}`);
 
   const data = await res.json();
   user.strapi = { userId: data.user?.id, password };
   await user.save();
-
-
-  return data;
+  setCachedJwt(user.email, data.jwt);
+  return data.jwt;
 }
 
 
-async function deleteStrapiFileByUrl(fileUrl: string, jwt: string): Promise<void> {
-  try {
-    const urlPath = new URL(fileUrl).pathname;
-    const fullFilename = urlPath.split("/").pop();
-    if (!fullFilename) return;
+/**
+ * ONE GET — batch lookup by URL hash ($in filter).
+ */
+async function lookupIdsByUrls(
+  fileUrls: string[],
+  jwt: string
+): Promise<number[]> {
+  if (fileUrls.length === 0) return [];
 
-
-    const hash = fullFilename.replace(/\.[^/.]+$/, "");
-
-
-    const searchRes = await fetch(
-      `${STRAPI_URL}/api/upload/files?filters[hash][$eq]=${encodeURIComponent(hash)}`,
-      { headers: { Authorization: `Bearer ${jwt}` } }
-    );
-    if (!searchRes.ok) return;
-
-
-    const files = await searchRes.json();
-    if (!Array.isArray(files) || files.length === 0) return;
-
-
-    await fetch(`${STRAPI_URL}/api/upload/files/${files[0].id}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${jwt}` },
-    });
-
-
-    console.log(`🗑️ Deleted Strapi file: ${fullFilename}`);
-  } catch (e) {
-    console.warn(`Failed to delete Strapi file by URL "${fileUrl}":`, e);
-  }
-}
-
-
-async function deleteStrapiFileByName(filename: string, jwt: string): Promise<void> {
-  try {
-    const searchRes = await fetch(
-      `${STRAPI_URL}/api/upload/files?filters[name][$eq]=${encodeURIComponent(filename)}`,
-      { headers: { Authorization: `Bearer ${jwt}` } }
-    );
-    if (!searchRes.ok) return;
-
-
-    const files = await searchRes.json();
-    if (!Array.isArray(files) || files.length === 0) {
-      console.warn(`Inline image not found in Strapi: ${filename}`);
-      return;
+  const hashMap = new Map<string, string>();
+  for (const fileUrl of fileUrls) {
+    try {
+      const fullFilename = new URL(fileUrl).pathname.split("/").pop();
+      if (!fullFilename) continue;
+      hashMap.set(fullFilename.replace(/\.[^/.]+$/, ""), fullFilename);
+    } catch {
+      console.warn(`Skipping invalid URL: ${fileUrl}`);
     }
+  }
+  if (hashMap.size === 0) return [];
+
+  const hashParams = Array.from(hashMap.keys())
+    .map((h, i) => `filters[hash][$in][${i}]=${encodeURIComponent(h)}`)
+    .join("&");
+
+  const res = await fetch(`${STRAPI_URL}/api/upload/files?${hashParams}`, {
+    headers: { Authorization: `Bearer ${jwt}` },
+  });
+  if (!res.ok) { console.warn("Batch hash lookup failed:", res.statusText); return []; }
+
+  const files = await res.json();
+  return Array.isArray(files) ? files.map((f: any) => f.id) : [];
+}
 
 
-    await fetch(`${STRAPI_URL}/api/upload/files/${files[0].id}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${jwt}` },
-    });
+/**
+ * ONE GET — batch lookup by filename ($in filter).
+ * Used for legacy inline images that have no strapiUrl stored.
+ */
+async function lookupIdsByNames(
+  filenames: string[],
+  jwt: string
+): Promise<number[]> {
+  if (filenames.length === 0) return [];
+
+  const nameParams = filenames
+    .map((n, i) => `filters[name][$in][${i}]=${encodeURIComponent(n)}`)
+    .join("&");
+
+  const res = await fetch(`${STRAPI_URL}/api/upload/files?${nameParams}`, {
+    headers: { Authorization: `Bearer ${jwt}` },
+  });
+  if (!res.ok) { console.warn("Batch name lookup failed:", res.statusText); return []; }
+
+  const files = await res.json();
+  return Array.isArray(files) ? files.map((f: any) => f.id) : [];
+}
 
 
-    console.log(`🗑️ Deleted Strapi inline image: ${filename}`);
-  } catch (e) {
-    console.warn(`Failed to delete Strapi file by name "${filename}":`, e);
+/**
+ * ONE POST — bulk delete all collected file IDs via custom Strapi endpoint.
+ */
+async function bulkDeleteStrapiFiles(ids: number[], jwt: string): Promise<void> {
+  if (ids.length === 0) return;
+
+  const res = await fetch(`${STRAPI_URL}/api/media/bulk-delete`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${jwt}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ ids }),
+  });
+
+  if (!res.ok) {
+    console.warn("Bulk delete failed:", await res.text());
+  } else {
+    console.log(`🗑️ Bulk deleted Strapi file ids: [${ids.join(", ")}]`);
   }
 }
 
 
-// Batch fetch all file URLs in one $in query, then delete each
-async function deleteStrapiFilesByUrls(fileUrls: string[], jwt: string): Promise<void> {
-  try {
-    const hashes: string[] = [];
-    const filenameMap: Record<string, string> = {}; // hash → fullFilename (for logging)
-
-    for (const fileUrl of fileUrls) {
-      try {
-        const urlPath = new URL(fileUrl).pathname;
-        const fullFilename = urlPath.split("/").pop();
-        if (!fullFilename) continue;
-        const hash = fullFilename.replace(/\.[^/.]+$/, "");
-        hashes.push(hash);
-        filenameMap[hash] = fullFilename;
-      } catch {
-        console.warn(`Skipping invalid URL: ${fileUrl}`);
-      }
-    }
-
-    if (hashes.length === 0) return;
-
-    // 1 API call to fetch all files by hash
-    const query = hashes
-      .map((h, i) => `filters[hash][$in][${i}]=${encodeURIComponent(h)}`)
-      .join("&");
-
-    const searchRes = await fetch(`${STRAPI_URL}/api/upload/files?${query}`, {
-      headers: { Authorization: `Bearer ${jwt}` },
-    });
-    if (!searchRes.ok) return;
-
-    const files = await searchRes.json();
-    if (!Array.isArray(files) || files.length === 0) return;
-
-    // Delete each file individually (Strapi has no batch delete)
-    await Promise.all(
-      files.map(async (file: any) => {
-        await fetch(`${STRAPI_URL}/api/upload/files/${file.id}`, {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${jwt}` },
-        });
-        console.log(`🗑️ Deleted Strapi file: ${filenameMap[file.hash] ?? file.id}`);
-      })
-    );
-  } catch (e) {
-    console.warn(`Failed to batch delete Strapi files:`, e);
-  }
-}
-
-
-function filenameFromBase64(base64?: string, fallback = "image") {
+function filenameFromBase64(base64?: string, fallback = "image"): string {
   if (!base64) return `${fallback}.png`;
-
-
   const nameMatch = base64.match(/name=([^;]+);base64,/);
   if (nameMatch?.[1]) {
-    try {
-      return decodeURIComponent(nameMatch[1]);
-    } catch {
-      return nameMatch[1];
-    }
+    try { return decodeURIComponent(nameMatch[1]); } catch { return nameMatch[1]; }
   }
-
-
   const mimeMatch = base64.match(/^data:(image\/[^;]+);base64,/);
   const mime = mimeMatch?.[1] || "image/png";
-
-
   const extMap: Record<string, string> = {
-    "image/png": "png",
-    "image/jpeg": "jpg",
-    "image/jpg": "jpg",
-    "image/webp": "webp",
-    "image/gif": "gif",
-    "image/svg+xml": "svg",
+    "image/png": "png", "image/jpeg": "jpg", "image/jpg": "jpg",
+    "image/webp": "webp", "image/gif": "gif", "image/svg+xml": "svg",
   };
-
-
   return `${fallback}.${extMap[mime] ?? "png"}`;
 }
-
-
-/* ───────────────── ROUTE ───────────────── */
 
 
 export async function POST(req: NextRequest) {
   try {
     const auth = await checkAdminAuth();
-    if (!auth.authorized) {
-      return NextResponse.json(
-        { error: auth.error || "Unauthorized" },
-        { status: auth.status || 403 }
-      );
-    }
-
+    if (!auth.authorized)
+      return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: auth.status || 403 });
 
     const { blogId } = await req.json();
-
-
-    if (!blogId) {
+    if (!blogId)
       return NextResponse.json({ error: "Blog ID is required" }, { status: 400 });
-    }
-
 
     await dbConnect();
 
-
     const blog = await Blog.findById(blogId);
-
-
-    if (!blog) {
+    if (!blog)
       return NextResponse.json({ error: "Blog not found" }, { status: 404 });
-    }
-
 
     const user = await User.findOne({ email: blog.author.email }).select("+strapi.password");
+    if (!user)
+      return NextResponse.json({ error: "Author not found" }, { status: 404 });
 
+    const jwt = await loginOrRegister(user);
 
-    if (!user) {
-      return NextResponse.json(
-        { error: "Author not found in database. Cannot authenticate with Strapi." },
-        { status: 404 }
-      );
+    const strapiDocId = blog.strapiId;
+    if (!strapiDocId) {
+      console.warn("⚠️ No strapiId — skipping Strapi deletion, cleaning MongoDB only.");
+      await Blog.findByIdAndDelete(blogId);
+      return NextResponse.json({ message: "Blog deleted (not in Strapi)" });
     }
 
+    // STEP 1 — Delete the blog entry from Strapi
+    const deleteRes = await fetch(`${STRAPI_URL}/api/blogs/${strapiDocId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${jwt}` },
+    });
+    if (!deleteRes.ok) {
+      const errData = await deleteRes.json().catch(() => ({}));
+      return NextResponse.json(
+        { error: `Strapi deletion blocked: ${errData?.error?.message || deleteRes.statusText}` },
+        { status: deleteRes.status }
+      );
+    }
+    console.log("Strapi blog deleted:", strapiDocId);
 
-    const { jwt } = await loginOrRegister(user);
+    // STEP 2 — Collect URLs and legacy filenames
+    const urlsToDelete: string[] = [];
+    const legacyFilenames: string[] = [];
 
+    if (blog.strapiCoverUrl) {
+      urlsToDelete.push(blog.strapiCoverUrl);
+    } else {
+      console.warn("⚠️ No strapiCoverUrl — cover not deleted from Strapi.");
+    }
 
-    let imageWarning = null;
-
-
-    if (STRAPI_URL && jwt) {
-      const strapiDocId = blog.strapiId;
-
-
-      if (!strapiDocId) {
-        console.warn("⚠️ No strapiId on blog — skipping Strapi deletion, cleaning MongoDB only.");
+    for (const img of blog.inlineImages ?? []) {
+      if (img.strapiUrl) {
+        urlsToDelete.push(img.strapiUrl);
       } else {
-        console.log(`Attempting to delete Strapi Blog (Doc ID: ${strapiDocId})`);
-
-
-        // STEP B: Delete the Blog Entry
-        const deleteRes = await fetch(`${STRAPI_URL}/api/blogs/${strapiDocId}`, {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${jwt}` },
-        });
-
-
-        if (!deleteRes.ok) {
-          const errData = await deleteRes.json().catch(() => ({}));
-          return NextResponse.json(
-            {
-              error: `Strapi deletion blocked: ${errData?.error?.message || deleteRes.statusText}. Please ensure the 'Authenticated' role in Strapi has 'destroy' permissions.`,
-            },
-            { status: deleteRes.status }
-          );
-        }
-
-
-        console.log("Strapi Blog deleted successfully.");
-
-
-        // STEP C: Delete Associated Images
-        const urlsToDelete: string[] = [];
-
-        if (blog.strapiCoverUrl) {
-          urlsToDelete.push(blog.strapiCoverUrl);
-        } else {
-          console.warn("⚠️ No strapiCoverUrl stored — cover image not deleted from Strapi.");
-        }
-
-        if (Array.isArray(blog.inlineImages) && blog.inlineImages.length > 0) {
-          for (const img of blog.inlineImages) {
-            if (img.strapiUrl) {
-              urlsToDelete.push(img.strapiUrl);
-            } else {
-              // fallback: inline image has no strapiUrl, delete by name individually
-              const filename = filenameFromBase64(img.base64, img.id);
-              if (filename) await deleteStrapiFileByName(filename, jwt);
-            }
-          }
-        }
-
-        if (urlsToDelete.length > 0) {
-          try {
-            await deleteStrapiFilesByUrls(urlsToDelete, jwt);
-          } catch (e) {
-            imageWarning = `Blog deleted, but some image deletions failed.`;
-            console.warn(imageWarning, e);
-          }
-        }
+        const filename = filenameFromBase64(img.base64, img.id);
+        if (filename) legacyFilenames.push(filename);
       }
     }
 
+    // STEP 3 — ONE GET for URL-based + ONE GET for name-based in parallel
+    const [urlIds, nameIds] = await Promise.all([
+      lookupIdsByUrls(urlsToDelete, jwt),
+      lookupIdsByNames(legacyFilenames, jwt),
+    ]);
 
-    // MONGODB DELETION
+    // STEP 4 — ONE POST bulk delete all collected IDs
+    await bulkDeleteStrapiFiles([...urlIds, ...nameIds], jwt);
+
+    // STEP 5 — Delete MongoDB doc
     await Blog.findByIdAndDelete(blogId);
-
-
-    if (imageWarning) {
-      return NextResponse.json({ error: imageWarning }, { status: 207 });
-    }
-
 
     return NextResponse.json({ message: "Blog permanently deleted" });
   } catch (error: any) {
     console.error("❌ Error approving delete:", error);
-    return NextResponse.json(
-      { error: error.message || "Internal server error during deletion." },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error.message || "Internal server error" }, { status: 500 });
   }
 }

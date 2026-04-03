@@ -35,7 +35,7 @@ export default function Footer() {
             </li>
             <li>
               <Link href="/create" className="hover:text-teal-400 transition">
-                Publish
+                Create
               </Link>
             </li>
             <li>
