@@ -5,11 +5,17 @@ import Blog from "@/models/Blog";
 import User from "@/models/User";
 import crypto from "crypto";
 import { FIXED_CATEGORIES } from "@/lib/categories";
+import { getCachedJwt, setCachedJwt } from "@/lib/strapiJwtCache";
 
-const STRAPI_URL = process.env.STRAPI_URL!.replace(/\/$/, "");
+
+const STRAPI_URL = process.env.STRAPI_URL!.replace(new RegExp("/$"), "");
 const MAX_CONTENT_CHARS = 100000;
 
+
 async function loginOrRegister(user: any): Promise<string> {
+  const cached = getCachedJwt(user.email);
+  if (cached) return cached;
+
   let password = user.strapi?.password;
   if (!password) password = crypto.randomBytes(24).toString("hex");
 
@@ -18,7 +24,11 @@ async function loginOrRegister(user: any): Promise<string> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ identifier: user.email, password }),
   });
-  if (res.ok) return (await res.json()).jwt;
+  if (res.ok) {
+    const data = await res.json();
+    setCachedJwt(user.email, data.jwt);
+    return data.jwt;
+  }
 
   if (user.strapi?.password) throw new Error("Stored Strapi credentials are invalid");
 
@@ -32,16 +42,20 @@ async function loginOrRegister(user: any): Promise<string> {
   const data = await res.json();
   user.strapi = { userId: data.user?.id, password };
   await user.save();
+  setCachedJwt(user.email, data.jwt);
   return data.jwt;
 }
+
 
 function sanitizeHtmlDataSrc(content: string) {
   return content.replace(/src="data:[^"]*"/g, "");
 }
 
+
 function removeStrayMarkdownBase64(content: string) {
   return content.replace(/!\[.*?\]\(data:[^)]*\)/g, "![image removed]");
 }
+
 
 function filenameFromBase64(base64?: string, fallback = "image"): string {
   if (!base64) return `${fallback}.png`;
@@ -49,7 +63,7 @@ function filenameFromBase64(base64?: string, fallback = "image"): string {
   if (nameMatch?.[1]) {
     try { return decodeURIComponent(nameMatch[1]); } catch { return nameMatch[1]; }
   }
-  const mimeMatch = base64.match(/data:(image\/[^;]+);base64/);
+  const mimeMatch = base64.match(new RegExp("^data:(image/[^;]+);base64,"));
   const mime = mimeMatch?.[1] ?? "image/png";
   const extMap: Record<string, string> = {
     "image/png": "png", "image/jpeg": "jpg", "image/jpg": "jpg",
@@ -58,53 +72,16 @@ function filenameFromBase64(base64?: string, fallback = "image"): string {
   return `${fallback}.${extMap[mime] ?? "png"}`;
 }
 
+
 function extractFileUrl(fileObj: any): string | null {
   if (!fileObj) return null;
   const url =
     (typeof fileObj === "string" ? fileObj : null) ??
     fileObj.url ?? fileObj.attributes?.url ?? fileObj.data?.attributes?.url ?? null;
   if (!url) return null;
-  return /^https?:\/\//i.test(url) ? url : `${STRAPI_URL}${url}`;
+  return new RegExp("^https?://", "i").test(url) ? url : `${STRAPI_URL}${url}`;
 }
 
-async function uploadInlineImage(base64: string, filename: string, jwt: string) {
-  const res = await fetch(base64);
-  if (!res.ok) throw new Error("Failed to decode inline image");
-  const blob = await res.blob();
-  const form = new FormData();
-  form.append("files", blob, filename);
-  const uploadRes = await fetch(`${STRAPI_URL}/api/upload`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${jwt}` },
-    body: form,
-  });
-  if (!uploadRes.ok) throw new Error("Inline image upload failed: " + await uploadRes.text());
-  const uploaded = await uploadRes.json();
-  return Array.isArray(uploaded) ? uploaded[0] : uploaded;
-}
-
-async function uploadCover(
-  base64: string,
-  filename: string,
-  jwt: string
-): Promise<{ id: number; url: string } | null> {
-  const res = await fetch(base64);
-  if (!res.ok) throw new Error("Failed to decode base64 cover image");
-  const blob = await res.blob();
-  const form = new FormData();
-  form.append("files", blob, filename);
-  const uploadRes = await fetch(`${STRAPI_URL}/api/upload`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${jwt}` },
-    body: form,
-  });
-  if (!uploadRes.ok) throw new Error("Cover upload failed: " + await uploadRes.text());
-  const uploaded = await uploadRes.json();
-  const fileObj = Array.isArray(uploaded) ? uploaded[0] : uploaded;
-  const url = extractFileUrl(fileObj);
-  if (!fileObj?.id || !url) return null;
-  return { id: fileObj.id, url };
-}
 
 function resolveCategoryIds(slugs: string[]): number[] {
   return slugs
@@ -112,12 +89,54 @@ function resolveCategoryIds(slugs: string[]): number[] {
     .filter((id): id is number => id !== undefined);
 }
 
+
 /**
- * Batch-delete multiple Strapi media files by their URLs.
- * 1 GET (filters[$in]) + N parallel DELETEs regardless of file count.
+ * ONE POST — all images (cover + inline) batched into a single FormData.
+ * Strapi returns an ordered array matching append order.
  */
-async function deleteStrapiFilesByUrls(fileUrls: string[], jwt: string): Promise<void> {
-  if (fileUrls.length === 0) return;
+async function batchUploadImages(
+  images: { key: string; blob: Blob; filename: string }[],
+  jwt: string
+): Promise<Map<string, { id: number; url: string }>> {
+  const result = new Map<string, { id: number; url: string }>();
+  if (images.length === 0) return result;
+
+  const form = new FormData();
+  for (const img of images) {
+    form.append("files", img.blob, img.filename);
+  }
+
+  const uploadRes = await fetch(`${STRAPI_URL}/api/upload`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${jwt}` },
+    body: form,
+  });
+  if (!uploadRes.ok) throw new Error("Batch upload failed: " + await uploadRes.text());
+
+  const uploaded: any[] = await uploadRes.json();
+  if (!Array.isArray(uploaded)) return result;
+
+  for (let i = 0; i < images.length && i < uploaded.length; i++) {
+    const fileObj = uploaded[i];
+    const url = extractFileUrl(fileObj);
+    if (fileObj?.id && url) {
+      result.set(images[i].key, { id: fileObj.id, url });
+    }
+  }
+
+  return result;
+}
+
+
+/**
+ * ONE GET — resolve all old file URLs → Strapi IDs via batch hash lookup.
+ * Runs in parallel with batchUploadImages.
+ */
+async function lookupStrapiFileIds(
+  fileUrls: string[],
+  jwt: string
+): Promise<{ id: number; hash: string }[]> {
+  if (fileUrls.length === 0) return [];
 
   const hashMap = new Map<string, string>();
   for (const fileUrl of fileUrls) {
@@ -130,7 +149,7 @@ async function deleteStrapiFilesByUrls(fileUrls: string[], jwt: string): Promise
       console.warn(`Skipping invalid URL: ${fileUrl}`);
     }
   }
-  if (hashMap.size === 0) return;
+  if (hashMap.size === 0) return [];
 
   const hashParams = Array.from(hashMap.keys())
     .map((h, i) => `filters[hash][$in][${i}]=${encodeURIComponent(h)}`)
@@ -141,23 +160,43 @@ async function deleteStrapiFilesByUrls(fileUrls: string[], jwt: string): Promise
   });
   if (!searchRes.ok) {
     console.warn("Batch file lookup failed:", searchRes.statusText);
-    return;
+    return [];
   }
 
   const files: { id: number; hash: string }[] = await searchRes.json();
-  if (!Array.isArray(files) || files.length === 0) return;
-
-  await Promise.all(
-    files.map((file) =>
-      fetch(`${STRAPI_URL}/api/upload/files/${file.id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${jwt}` },
-      })
-        .then(() => console.log(`🗑️ Deleted Strapi file id=${file.id} (${file.hash})`))
-        .catch((e) => console.warn(`Failed to delete file id=${file.id}:`, e))
-    )
-  );
+  return Array.isArray(files) ? files : [];
 }
+
+
+/**
+ * ONE DELETE — bulk delete via custom Strapi extension at /api/media/bulk-delete.
+ * Requires src/extensions/upload/strapi-server.ts in the Strapi project.
+ * Must only run AFTER the Strapi PUT completes (FK constraint safety).
+ */
+async function deleteStrapiFiles(
+  files: { id: number; hash: string }[],
+  jwt: string
+): Promise<void> {
+  if (files.length === 0) return;
+
+  const ids = files.map((f) => f.id);
+
+  const res = await fetch(`${STRAPI_URL}/api/media/bulk-delete`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${jwt}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ ids }),
+  });
+
+  if (!res.ok) {
+    console.warn("Bulk delete failed:", await res.text());
+  } else {
+    console.log(`🗑️ Bulk deleted Strapi file ids: [${ids.join(", ")}]`);
+  }
+}
+
 
 export async function POST(req: NextRequest) {
   try {
@@ -180,9 +219,12 @@ export async function POST(req: NextRequest) {
     const jwt = await loginOrRegister(user);
     const edits = blog.pendingEdit;
 
-    // STEP 2 — Identify inline images that need uploading vs already have a URL
+    // STEP 2 — Classify images + compute urlsToDelete EARLY
     const needsNewCover =
       edits.coverImage != null && edits.coverImage !== "" && edits.coverImage.startsWith("data:");
+    const coverRemoved =
+      edits.coverImage === "" || edits.coverImage === null || edits.coverImage === undefined;
+    const oldCoverUrl = blog.strapiCoverUrl;
 
     const activeImgs = (edits.inlineImages ?? []).filter(
       (img) =>
@@ -192,39 +234,62 @@ export async function POST(req: NextRequest) {
       (img) => !img.strapiUrl && img.base64?.startsWith("data:")
     );
 
-    // STEP 3 — Parallel: new cover upload + all new inline image uploads
-    const [coverUploadResult, ...inlineUploadResults] = await Promise.all([
-      needsNewCover
-        ? uploadCover(
-            edits.coverImage!,
-            edits.coverImageName || filenameFromBase64(edits.coverImage),
-            jwt
-          )
-        : Promise.resolve(null),
-      ...toUploadImgs.map(async (img) => {
-        const filename = filenameFromBase64(img.base64, img.id);
-        try {
-          const uploaded = await uploadInlineImage(img.base64, filename, jwt);
-          return { id: img.id as string, url: extractFileUrl(uploaded) };
-        } catch (e) {
-          console.error("Inline image upload failed for", img.id, e);
-          return { id: img.id as string, url: null as string | null };
-        }
-      }),
-    ]);
+    const urlsToDelete: string[] = [];
+    if ((coverRemoved || needsNewCover) && oldCoverUrl) urlsToDelete.push(oldCoverUrl);
 
-    // Build a map of newly uploaded inline images: img.id → strapiUrl
-    const uploadedUrlMap = new Map<string, string>();
-    for (const result of inlineUploadResults) {
-      if (result?.url) uploadedUrlMap.set(result.id, result.url);
+    const oldInlineStrapiUrls = new Set<string>(
+      (blog.inlineImages ?? []).map((img: any) => img.strapiUrl).filter(Boolean)
+    );
+    const keptInlineStrapiUrls = new Set<string>(
+      activeImgs.map((img: any) => img.strapiUrl).filter(Boolean)
+    );
+    for (const oldUrl of oldInlineStrapiUrls) {
+      if (!keptInlineStrapiUrls.has(oldUrl)) urlsToDelete.push(oldUrl);
     }
+
+    // STEP 3 — Decode all base64 blobs locally in parallel (memory-only, no network)
+    const blobJobs: Promise<{ key: string; blob: Blob; filename: string } | null>[] = [];
+
+    if (needsNewCover) {
+      blobJobs.push(
+        fetch(edits.coverImage!)
+          .then(async (r) => ({
+            key: "cover",
+            blob: await r.blob(),
+            filename: edits.coverImageName || filenameFromBase64(edits.coverImage),
+          }))
+          .catch((e) => { console.error("Cover decode failed:", e); return null; })
+      );
+    }
+
+    for (const img of toUploadImgs) {
+      blobJobs.push(
+        fetch(img.base64)
+          .then(async (r) => ({
+            key: img.id as string,
+            blob: await r.blob(),
+            filename: filenameFromBase64(img.base64, img.id),
+          }))
+          .catch((e) => { console.error("Inline decode failed for", img.id, e); return null; })
+      );
+    }
+
+    const imagesToUpload = (await Promise.all(blobJobs)).filter(
+      (x): x is { key: string; blob: Blob; filename: string } => x !== null
+    );
+
+    // PHASE 1 — ONE POST (all images batched) + ONE GET (hash lookup) in parallel
+    const [uploadResultMap, filesToDelete] = await Promise.all([
+      batchUploadImages(imagesToUpload, jwt),
+      lookupStrapiFileIds(urlsToDelete, jwt),
+    ]);
 
     // STEP 4 — Build Strapi content + activeInlineImages list
     let strapiContent = sanitizeHtmlDataSrc(edits.content || "");
     const activeInlineImages: any[] = [];
 
     for (const img of activeImgs) {
-      const strapiUrl = img.strapiUrl || uploadedUrlMap.get(img.id) || null;
+      const strapiUrl = img.strapiUrl || uploadResultMap.get(img.id)?.url || null;
       if (strapiUrl) {
         strapiContent = strapiContent.split(img.placeholder).join(`![image](${strapiUrl})`);
         activeInlineImages.push({ ...img, strapiUrl });
@@ -237,20 +302,17 @@ export async function POST(req: NextRequest) {
     if (strapiContent.length > MAX_CONTENT_CHARS)
       strapiContent = strapiContent.slice(0, MAX_CONTENT_CHARS);
 
-    let mongoContent = removeStrayMarkdownBase64(edits.content || "");
+    const mongoContent = removeStrayMarkdownBase64(edits.content || "");
 
     // STEP 5 — Cover resolution
-    const oldCoverUrl = blog.strapiCoverUrl;
-    const newCoverUrl = coverUploadResult?.url ?? null;
-    const newCoverId = coverUploadResult?.id ?? null;
-    const coverRemoved =
-      edits.coverImage === "" || edits.coverImage === null || edits.coverImage === undefined;
+    const coverUpload = uploadResultMap.get("cover") ?? null;
+    const newCoverUrl = coverUpload?.url ?? null;
+    const newCoverId = coverUpload?.id ?? null;
 
     // STEP 6 — Category IDs (sync, no API call)
     const categoryIds = resolveCategoryIds(edits.categories ?? []);
 
-    // STEP 7 — Update Strapi
-    // ← Use blog.strapiId directly — no need to search by slug (saves 1 GET)
+    // STEP 7 — Build Strapi update payload
     const strapiDocId = blog.strapiId;
     if (!strapiDocId)
       throw new Error("No strapiId stored — cannot update blog in Strapi.");
@@ -269,6 +331,7 @@ export async function POST(req: NextRequest) {
       updatePayload.cover = null;
     }
 
+    // PHASE 2a — PUT must complete before deletes (FK constraint safety)
     const strapiUpdate = await fetch(`${STRAPI_URL}/api/blogs/${strapiDocId}`, {
       method: "PUT",
       headers: { Authorization: `Bearer ${jwt}`, "Content-Type": "application/json" },
@@ -277,23 +340,8 @@ export async function POST(req: NextRequest) {
     if (!strapiUpdate.ok)
       throw new Error("Strapi update failed: " + await strapiUpdate.text());
 
-    // STEP 7.5 — Batch-delete old Strapi media no longer needed
-    const urlsToDelete: string[] = [];
-
-    if ((coverRemoved || newCoverUrl) && oldCoverUrl) urlsToDelete.push(oldCoverUrl);
-
-    const oldInlineStrapiUrls = new Set<string>(
-      (blog.inlineImages ?? []).map((img: any) => img.strapiUrl).filter(Boolean)
-    );
-    const newInlineStrapiUrls = new Set<string>(
-      activeInlineImages.map((img: any) => img.strapiUrl).filter(Boolean)
-    );
-
-    for (const oldUrl of oldInlineStrapiUrls) {
-      if (!newInlineStrapiUrls.has(oldUrl)) urlsToDelete.push(oldUrl);
-    }
-
-    await deleteStrapiFilesByUrls(urlsToDelete, jwt);
+    // PHASE 2b — ONE DELETE (bulk) after PUT (IDs pre-resolved in PHASE 1)
+    await deleteStrapiFiles(filesToDelete, jwt);
 
     // STEP 8 — Apply edits to MongoDB
     blog.title = edits.title;
@@ -308,11 +356,10 @@ export async function POST(req: NextRequest) {
       blog.coverImageName = undefined;
       blog.strapiCoverUrl = undefined;
     } else if (newCoverUrl) {
-      blog.coverImage = edits.coverImage;    // keep base64 in MongoDB
-      blog.strapiCoverUrl = newCoverUrl;     // persist Strapi URL separately
+      blog.coverImage = edits.coverImage;
+      blog.strapiCoverUrl = newCoverUrl;
       if (edits.coverImageName) blog.coverImageName = edits.coverImageName;
     }
-    // else: cover unchanged — both fields stay as-is
 
     blog.adminNotes = undefined;
     blog.isEditPending = false;
