@@ -158,6 +158,7 @@ export default function EditBlogPage() {
   const titleRef = useRef<HTMLDivElement>(null);
   const descriptionRef = useRef<HTMLDivElement>(null);
   const categoryRef = useRef<HTMLDivElement>(null);
+  const slugRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -210,9 +211,9 @@ export default function EditBlogPage() {
       return;
     }
 
-    const maxSize = 2 * 1024 * 1024;
+    const maxSize = 400 * 1024;
     if (file.size > maxSize) {
-      setCoverImageError("Image size must be less than 2MB.");
+      setCoverImageError("Image size must be less than 400KB.");
       return;
     }
 
@@ -239,9 +240,9 @@ export default function EditBlogPage() {
       return;
     }
 
-    const maxSize = 2 * 1024 * 1024;
+    const maxSize = 400 * 1024;
     if (file.size > maxSize) {
-      setInlineImageError("Image size must be less than 2MB.");
+      setInlineImageError("Image size must be less than 400KB.");
       return;
     }
 
@@ -311,6 +312,13 @@ export default function EditBlogPage() {
     return null;
   }
 
+  function getSlugError(): string | null {
+    if (slug.trim().length === 0) return "Please fill in this field.";
+    if (!/^[a-z0-9-]+$/.test(slug.trim()))
+      return "Slug must be lowercase, URL-friendly, and contain no spaces.";
+    return null;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!user) return setMessage("You must be logged in to edit a blog.");
@@ -323,9 +331,11 @@ export default function EditBlogPage() {
         ? descriptionRef
         : getCategoryError()
           ? categoryRef
-          : getContentError()
-            ? contentRef
-            : null;
+          : getSlugError()
+            ? slugRef
+            : getContentError()
+              ? contentRef
+              : null;
 
     if (firstErrorRef?.current) {
       setTimeout(() => {
@@ -340,8 +350,8 @@ export default function EditBlogPage() {
       getTitleError() ||
       getDescriptionError() ||
       getCategoryError() ||
-      getContentError() ||
-      !slug.trim()
+      getSlugError() ||
+      getContentError()
     )
       return;
 
@@ -700,7 +710,7 @@ export default function EditBlogPage() {
             </div>
 
             {/* Slug */}
-            <div>
+            <div ref={slugRef}>
               <label className="block text-sm text-gray-400 mb-2">
                 Slug <span className="text-red-500">*</span>
               </label>
@@ -716,6 +726,11 @@ export default function EditBlogPage() {
                 Used in URL: yoursite.com/blog/
                 <strong>{slug || "slug"}</strong>
               </p>
+              <AnimatePresence>
+                {showErrors && getSlugError() && (
+                  <ValidationWarning key="slug-err" message={getSlugError()!} />
+                )}
+              </AnimatePresence>
             </div>
 
             {/* Cover Image Upload */}
@@ -754,7 +769,7 @@ export default function EditBlogPage() {
                       Click to upload cover image
                     </span>
                     <span className="text-xs text-gray-600 mt-1">
-                      Max size: 2MB
+                      Max size: 400KB
                     </span>
                   </label>
                 </div>

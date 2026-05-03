@@ -7,7 +7,7 @@ export interface IBlog extends Document {
   description: string;
   coverImage?: string;
   coverImageName?: string;
-  strapiCoverUrl?: string; // ← NEW: Strapi URL saved after first upload
+  strapiCoverUrl?: string;
   inlineImages?: { id: string; placeholder: string; base64: string; strapiUrl?: string }[];
   categories: string[];
   author: { auth0Id: string; username: string; email: string };
@@ -24,7 +24,7 @@ export interface IBlog extends Document {
     description: string;
     coverImage?: string;
     coverImageName?: string;
-    strapiCoverUrl?: string; // ← NEW: preserve across edits
+    strapiCoverUrl?: string;
     inlineImages?: { id: string; placeholder: string; base64: string; strapiUrl?: string }[];
     categories: string[];
   };
@@ -46,7 +46,7 @@ const BlogSchema = new mongoose.Schema<IBlog>(
     description: { type: String, required: true, trim: true, minlength: 10, maxlength: 300 },
     coverImage: String,
     coverImageName: String,
-    strapiCoverUrl: String, // ← NEW
+    strapiCoverUrl: String,
     inlineImages: [
       {
         id: { type: String, required: true },
@@ -85,7 +85,7 @@ const BlogSchema = new mongoose.Schema<IBlog>(
       description: String,
       coverImage: String,
       coverImageName: String,
-      strapiCoverUrl: String, // ← NEW
+      strapiCoverUrl: String,
       inlineImages: [
         {
           id: { type: String, required: true },
