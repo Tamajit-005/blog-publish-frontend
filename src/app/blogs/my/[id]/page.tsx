@@ -14,7 +14,10 @@ import { toast } from "react-hot-toast";
 interface InlineImage {
   id: string;
   placeholder: string;
-  base64: string;
+  r2Key?: string | null;
+  r2Url?: string | null;
+  strapiUrl?: string | null;
+  strapiId?: number;
 }
 
 interface Blog {
@@ -23,7 +26,11 @@ interface Blog {
   slug: string;
   content: string;
   description?: string;
+  r2CoverKey?: string | null;
+  r2CoverUrl?: string | null;
   coverImage?: string;
+  strapiCoverUrl?: string | null;
+  strapiCoverId?: number;
   inlineImages?: InlineImage[];
   categories: string[];
   author: {
@@ -35,12 +42,8 @@ interface Blog {
   adminNotes?: string;
   createdAt: string;
   updatedAt: string;
-
-  // Deletion rejection fields
   isDeletionRejected?: boolean;
   deletionRejectedNotes?: string;
-
-  // Edit rejection/pending fields
   isEditPending?: boolean;
   isEditRejected?: boolean;
   pendingEdit?: {
@@ -48,12 +51,17 @@ interface Blog {
     slug: string;
     content: string;
     description?: string;
-    coverImage?: string;
+    r2CoverKey?: string | null;
+    r2CoverUrl?: string | null;
     coverImageName?: string;
+    strapiCoverUrl?: string | null;
+    strapiCoverId?: number;
     inlineImages?: InlineImage[];
     categories: string[];
   };
 }
+
+const R2_URL = (process.env.NEXT_PUBLIC_R2_PUBLIC_URL ?? "").replace(/\/$/, "");
 
 const handleCopyCode = async (code: string) => {
   try {
@@ -64,6 +72,54 @@ const handleCopyCode = async (code: string) => {
     toast.error("Copy failed");
   }
 };
+
+function resolveR2Url(
+  r2Url?: string | null,
+  r2Key?: string | null,
+): string | null {
+  if (r2Url) return r2Url;
+  if (r2Key && R2_URL) return `${R2_URL}/${r2Key}`;
+  return null;
+}
+
+function resolveInlineImage(img?: InlineImage | null): string | null {
+  if (!img) return null;
+  return (
+    img.r2Url ?? resolveR2Url(undefined, img.r2Key) ?? img.strapiUrl ?? null
+  );
+}
+
+function getCurrentLiveCover(blog: Blog): string | null {
+  return (
+    resolveR2Url(blog.r2CoverUrl, blog.r2CoverKey) ??
+    blog.strapiCoverUrl ??
+    blog.coverImage ??
+    null
+  );
+}
+
+function getPendingEditCover(baseBlog: Blog): string | null {
+  const pending = baseBlog.pendingEdit;
+  if (!pending) return getCurrentLiveCover(baseBlog);
+
+  if (pending.r2CoverUrl !== undefined) {
+    if (pending.r2CoverUrl) return pending.r2CoverUrl;
+    if (pending.r2CoverKey) return resolveR2Url(undefined, pending.r2CoverKey);
+    return null;
+  }
+
+  if (pending.r2CoverKey !== undefined) {
+    return pending.r2CoverKey
+      ? resolveR2Url(undefined, pending.r2CoverKey)
+      : null;
+  }
+
+  if (pending.strapiCoverUrl !== undefined) {
+    return pending.strapiCoverUrl ?? null;
+  }
+
+  return getCurrentLiveCover(baseBlog);
+}
 
 export default function MyBlogDetailPage() {
   const router = useRouter();
@@ -99,23 +155,34 @@ export default function MyBlogDetailPage() {
 
         setMongoBlog(fetched);
 
-        if (fetched.status === "published") {
-          // If a pending edit exists, show the edited version for preview
-          if (fetched.isEditPending && fetched.pendingEdit) {
-            setBlog({
-              ...fetched,
-              title: fetched.pendingEdit.title,
-              slug: fetched.pendingEdit.slug,
-              content: fetched.pendingEdit.content,
-              description: fetched.pendingEdit.description,
-              coverImage: fetched.pendingEdit.coverImage ?? fetched.coverImage,
-              inlineImages: fetched.pendingEdit.inlineImages ?? [],
-              categories: fetched.pendingEdit.categories,
-            });
-          } else {
-            // No pending edit — use MongoDB data directly (no Strapi fetch)
-            setBlog(fetched);
-          }
+        if (
+          fetched.status === "published" &&
+          fetched.isEditPending &&
+          fetched.pendingEdit
+        ) {
+          setBlog({
+            ...fetched,
+            title: fetched.pendingEdit.title,
+            slug: fetched.pendingEdit.slug,
+            content: fetched.pendingEdit.content,
+            description: fetched.pendingEdit.description,
+            r2CoverKey:
+              fetched.pendingEdit.r2CoverKey !== undefined
+                ? fetched.pendingEdit.r2CoverKey
+                : fetched.r2CoverKey,
+            r2CoverUrl:
+              fetched.pendingEdit.r2CoverUrl !== undefined
+                ? fetched.pendingEdit.r2CoverUrl
+                : fetched.r2CoverUrl,
+            strapiCoverUrl:
+              fetched.pendingEdit.strapiCoverUrl !== undefined
+                ? fetched.pendingEdit.strapiCoverUrl
+                : fetched.strapiCoverUrl,
+            coverImage: fetched.coverImage,
+            inlineImages:
+              fetched.pendingEdit.inlineImages ?? fetched.inlineImages ?? [],
+            categories: fetched.pendingEdit.categories,
+          });
         } else {
           setBlog(fetched);
         }
@@ -134,16 +201,17 @@ export default function MyBlogDetailPage() {
 
     if (currentBlog.inlineImages && currentBlog.inlineImages.length > 0) {
       currentBlog.inlineImages.forEach((img) => {
-        if (img.placeholder && img.base64) {
-          const cleanBase64 = img.base64.trim();
+        const imgSrc = resolveInlineImage(img);
+        if (img.placeholder && imgSrc) {
           content = content
             .split(img.placeholder)
             .join(
-              `<img src="${cleanBase64}" alt="Inline Image" class="rounded-lg w-full my-4 object-cover" />`,
+              `<img src="${imgSrc.trim()}" alt="Inline Image" class="rounded-lg w-full my-4 object-cover" />`,
             );
         }
       });
     }
+
     return content;
   };
 
@@ -168,6 +236,11 @@ export default function MyBlogDetailPage() {
   // Use mongoBlog for rejection fields since blog state may reflect pendingEdit view
   const source = mongoBlog ?? blog;
 
+  const coverSrc =
+    source.status === "published" && source.isEditPending
+      ? getPendingEditCover(source)
+      : getCurrentLiveCover(blog);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 40 }}
@@ -176,7 +249,6 @@ export default function MyBlogDetailPage() {
       className="w-full min-h-screen bg-slate-950 text-gray-200"
     >
       <div className="max-w-3xl mx-auto p-6 pb-20">
-        {/* TITLE */}
         <motion.h1
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -186,7 +258,6 @@ export default function MyBlogDetailPage() {
           {blog.title}
         </motion.h1>
 
-        {/* CREATED DATE */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -196,7 +267,6 @@ export default function MyBlogDetailPage() {
           {blog.createdAt ? `Created ${moment(blog.createdAt).fromNow()}` : ""}
         </motion.div>
 
-        {/* STATUS BADGE */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -218,8 +288,7 @@ export default function MyBlogDetailPage() {
           </span>
         </motion.div>
 
-        {/* PENDING EDIT BANNER */}
-        {source.isEditPending && blog.status === "published" && (
+        {source.isEditPending && source.status === "published" && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -231,8 +300,7 @@ export default function MyBlogDetailPage() {
           </motion.div>
         )}
 
-        {/* BLOG REJECTION REASON */}
-        {blog.status === "rejected" && source.adminNotes && (
+        {source.status === "rejected" && source.adminNotes && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -244,7 +312,6 @@ export default function MyBlogDetailPage() {
           </motion.div>
         )}
 
-        {/* EDIT REJECTION REASON */}
         {source.isEditRejected && source.adminNotes && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -257,7 +324,6 @@ export default function MyBlogDetailPage() {
           </motion.div>
         )}
 
-        {/* DELETION REJECTION REASON */}
         {source.isDeletionRejected && source.deletionRejectedNotes && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -270,13 +336,12 @@ export default function MyBlogDetailPage() {
           </motion.div>
         )}
 
-        {/* CATEGORIES */}
         {blog.categories?.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            className="flex flex-wrap space-x-2 my-4 justify-center"
+            className="flex flex-wrap gap-2 my-4 justify-center"
           >
             {blog.categories.map((name, index) => (
               <span
@@ -289,8 +354,7 @@ export default function MyBlogDetailPage() {
           </motion.div>
         )}
 
-        {/* COVER IMAGE */}
-        {blog.coverImage && (
+        {coverSrc && (
           <motion.div
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -298,14 +362,14 @@ export default function MyBlogDetailPage() {
             className="relative h-72 w-full my-6"
           >
             <img
-              src={blog.coverImage}
+              src={coverSrc}
               alt={blog.title}
               className="rounded-lg w-full h-full object-cover"
+              loading="lazy"
             />
           </motion.div>
         )}
 
-        {/* DESCRIPTION */}
         {blog.description && (
           <motion.p
             initial={{ opacity: 0, y: 10 }}
@@ -317,7 +381,6 @@ export default function MyBlogDetailPage() {
           </motion.p>
         )}
 
-        {/* CONTENT */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -422,7 +485,6 @@ export default function MyBlogDetailPage() {
           </Markdown>
         </motion.div>
 
-        {/* AUTHOR */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -446,7 +508,6 @@ export default function MyBlogDetailPage() {
           )}
         </motion.div>
 
-        {/* BACK */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

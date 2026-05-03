@@ -4,13 +4,24 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 
+interface InlineImage {
+  id: string;
+  placeholder: string;
+  r2Key?: string;
+  r2Url?: string;
+  strapiUrl?: string;
+  strapiId?: number;
+}
+
 interface Blog {
   _id: string;
   title: string;
   slug: string;
   description?: string;
-  categories: string[];
+  r2CoverKey?: string;
+  r2CoverUrl?: string;
   coverImage?: string;
+  strapiCoverUrl?: string;
   author: {
     username: string;
     email: string;
@@ -19,14 +30,19 @@ interface Blog {
   createdAt: string;
   deletionRequested?: boolean;
   isEditPending?: boolean;
+  inlineImages?: InlineImage[];
 
-  // Pending edit fields (if isEditPending is true)
   pendingEdit?: {
     title: string;
     description?: string;
-    coverImage?: string;
+    r2CoverKey?: string | null;
+    r2CoverUrl?: string | null;
+    strapiCoverUrl?: string | null;
     categories: string[];
+    inlineImages?: InlineImage[];
   };
+
+  categories: string[];
 }
 
 const tabs = [
@@ -35,6 +51,17 @@ const tabs = [
   { id: "deletion" as const, label: "Deletion", activeColor: "bg-red-600" },
   { id: "edits" as const, label: "Edits", activeColor: "bg-blue-600" },
 ];
+
+const R2_URL = process.env.NEXT_PUBLIC_R2_PUBLIC_URL ?? "";
+
+function resolveR2Url(
+  r2Url?: string | null,
+  r2Key?: string | null,
+): string | null {
+  if (r2Url) return r2Url;
+  if (r2Key && R2_URL) return `${R2_URL}/${r2Key}`;
+  return null;
+}
 
 export default function AdminBlogsClient() {
   const router = useRouter();
@@ -47,69 +74,65 @@ export default function AdminBlogsClient() {
   >("pending");
 
   useEffect(() => {
+    setError("");
     if (activeTab === "manage") fetchAllBlogs();
     else if (activeTab === "pending") fetchPendingBlogs();
     else if (activeTab === "deletion") fetchDeletionRequests();
     else fetchEditRequests();
   }, [activeTab]);
 
-  // Fetches all blogs for admin management (Manage tab)
   async function fetchAllBlogs() {
     setLoading(true);
     try {
       const res = await fetch("/api/admin/blogs/all");
       const data = await res.json();
       setBlogs(data.blogs || []);
-    } catch (err) {
+    } catch {
       setError("Failed to fetch all blogs");
     } finally {
       setLoading(false);
     }
   }
 
-  // Fetches blogs awaiting admin approval
   async function fetchPendingBlogs() {
     setLoading(true);
     try {
       const res = await fetch("/api/admin/blogs/pending");
       const data = await res.json();
       setBlogs(data.blogs || []);
-    } catch (err) {
+    } catch {
       setError("Failed to fetch pending blogs");
     } finally {
       setLoading(false);
     }
   }
 
-  // Fetches blogs with pending deletion requests from authors
   async function fetchDeletionRequests() {
     setLoading(true);
     try {
       const res = await fetch("/api/admin/blogs/delete-requests");
       const data = await res.json();
       setBlogs(data.blogs || []);
-    } catch (err) {
+    } catch {
       setError("Failed to fetch deletion requests");
     } finally {
       setLoading(false);
     }
   }
 
-  // Fetches blogs with pending edit requests from authors
   async function fetchEditRequests() {
     setLoading(true);
     try {
       const res = await fetch("/api/admin/blogs/edit-requests");
       const data = await res.json();
       setBlogs(data.blogs || []);
-    } catch (err) {
+    } catch {
       setError("Failed to fetch edit requests");
     } finally {
       setLoading(false);
     }
   }
 
-  // Directly deletes a blog from MongoDB and Strapi (admin-only, Manage tab)
   async function deleteBlog(e: React.MouseEvent, blogId: string) {
     e.stopPropagation();
     if (!confirm("Delete this blog permanently? This cannot be undone."))
@@ -130,7 +153,6 @@ export default function AdminBlogsClient() {
     }
   }
 
-  // Approves a pending blog and publishes it to Strapi
   async function handleApprove(e: React.MouseEvent, blogId: string) {
     e.stopPropagation();
     if (!confirm("Approve and publish this blog?")) return;
@@ -145,7 +167,6 @@ export default function AdminBlogsClient() {
     }
   }
 
-  // Rejects a pending blog with an admin-provided reason
   async function handleReject(e: React.MouseEvent, blogId: string) {
     e.stopPropagation();
     const reason = prompt("Reason for rejection:");
@@ -161,7 +182,6 @@ export default function AdminBlogsClient() {
     }
   }
 
-  // Approves a deletion request — permanently deletes blog from Strapi and MongoDB
   async function handleApproveDelete(e: React.MouseEvent, blogId: string) {
     e.stopPropagation();
     if (!confirm("This will permanently delete the blog. Continue?")) return;
@@ -176,8 +196,6 @@ export default function AdminBlogsClient() {
     }
   }
 
-  // Rejection of deletion request clears deletionRequested flag,
-  // sets isDeletionRejected to true, and stores admin notes for the author
   async function handleRejectDelete(e: React.MouseEvent, blogId: string) {
     e.stopPropagation();
     const reason = prompt("Reason for rejecting this deletion request:");
@@ -196,7 +214,6 @@ export default function AdminBlogsClient() {
     }
   }
 
-  // Approves pending edit, applies changes, and pushes updated blog to Strapi
   async function handleApproveEdit(e: React.MouseEvent, blogId: string) {
     e.stopPropagation();
     if (!confirm("Approve these edits and push to live site?")) return;
@@ -211,7 +228,6 @@ export default function AdminBlogsClient() {
     }
   }
 
-  // Rejects a pending edit with an admin-provided reason
   async function handleRejectEdit(e: React.MouseEvent, blogId: string) {
     e.stopPropagation();
     const reason = prompt("Reason for rejection:");
@@ -235,13 +251,11 @@ export default function AdminBlogsClient() {
       className="min-h-screen bg-slate-950 text-gray-100 px-4 md:px-6 py-8 md:py-12"
     >
       <div className="max-w-7xl mx-auto">
-        {/* HEADER — stacked on mobile, side-by-side on desktop */}
         <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 mb-6">
           <h1 className="text-3xl md:text-4xl font-bold text-teal-400">
             Admin Dashboard
           </h1>
 
-          {/* TABS — scrollable on mobile */}
           <div className="overflow-x-auto pb-1">
             <div className="flex space-x-1 bg-gray-900 p-1 rounded-lg w-max overflow-hidden">
               {tabs.map((tab) => (
@@ -271,7 +285,6 @@ export default function AdminBlogsClient() {
           </div>
         </div>
 
-        {/* CONTENT */}
         <AnimatePresence mode="wait">
           <motion.div
             key={`${activeTab}-${loading}`}
@@ -282,12 +295,13 @@ export default function AdminBlogsClient() {
           >
             {loading ? (
               <div className="text-center mt-20 text-teal-400">Loading...</div>
+            ) : error ? (
+              <p className="text-center text-red-400 mt-20">{error}</p>
             ) : blogs.length === 0 ? (
               <p className="text-center text-gray-400 mt-20">No blogs found.</p>
             ) : (
               <div className="space-y-4 md:space-y-6">
                 {blogs.map((blog) => {
-                  // In the edits tab, display pending edit data if available
                   const displayTitle =
                     activeTab === "edits" && blog.pendingEdit?.title
                       ? blog.pendingEdit.title
@@ -298,10 +312,25 @@ export default function AdminBlogsClient() {
                       ? blog.pendingEdit.description
                       : blog.description;
 
-                  const displayCoverImage =
+                  const displayCoverImage: string | null =
                     activeTab === "edits" && blog.pendingEdit != null
-                      ? blog.pendingEdit.coverImage
-                      : blog.coverImage;
+                      ? blog.pendingEdit.r2CoverUrl !== undefined
+                        ? blog.pendingEdit.r2CoverUrl
+                          ? blog.pendingEdit.r2CoverUrl
+                          : null
+                        : (resolveR2Url(
+                            blog.pendingEdit.r2CoverUrl,
+                            blog.pendingEdit.r2CoverKey,
+                          ) ??
+                          resolveR2Url(blog.r2CoverUrl, blog.r2CoverKey) ??
+                          blog.pendingEdit.strapiCoverUrl ??
+                          blog.strapiCoverUrl ??
+                          blog.coverImage ??
+                          null)
+                      : (resolveR2Url(blog.r2CoverUrl, blog.r2CoverKey) ??
+                        blog.strapiCoverUrl ??
+                        blog.coverImage ??
+                        null);
 
                   const displayCategories =
                     activeTab === "edits" && blog.pendingEdit?.categories
@@ -316,13 +345,13 @@ export default function AdminBlogsClient() {
                       className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden cursor-pointer hover:border-teal-500 transition-colors"
                     >
                       <div className="flex flex-row">
-                        {/* COVER IMAGE — small thumbnail on mobile, wide panel on desktop */}
                         <div className="w-24 md:w-80 md:h-64 flex-shrink-0 self-stretch">
                           {displayCoverImage ? (
                             <img
                               src={displayCoverImage}
                               className="w-full h-full object-cover"
                               alt={displayTitle}
+                              loading="lazy"
                             />
                           ) : (
                             <div className="w-full h-full bg-gray-800 flex items-center justify-center text-gray-600 text-xs">
@@ -332,7 +361,6 @@ export default function AdminBlogsClient() {
                         </div>
 
                         <div className="p-3 md:p-6 flex-1 min-w-0">
-                          {/* TITLE + EDIT PENDING BADGE */}
                           <div className="flex items-start justify-between mb-1 md:mb-2 gap-2">
                             <h2 className="text-sm md:text-xl font-semibold line-clamp-2">
                               {displayTitle}
@@ -344,12 +372,10 @@ export default function AdminBlogsClient() {
                             )}
                           </div>
 
-                          {/* DESCRIPTION — hidden on mobile */}
                           <p className="hidden md:block text-gray-400 mb-3 truncate">
                             {displayDescription || "No description."}
                           </p>
 
-                          {/* CATEGORIES — hidden on mobile */}
                           <div className="hidden md:flex gap-2 flex-wrap mb-4">
                             {displayCategories.map((cat) => (
                               <span
@@ -361,7 +387,6 @@ export default function AdminBlogsClient() {
                             ))}
                           </div>
 
-                          {/* AUTHOR & DATE */}
                           <div className="flex flex-wrap gap-2 md:gap-4 text-xs md:text-sm text-gray-500 mb-3 md:mb-4">
                             <span>
                               By:{" "}
@@ -381,9 +406,7 @@ export default function AdminBlogsClient() {
                             </span>
                           </div>
 
-                          {/* ACTION BUTTONS */}
                           <div className="flex flex-wrap gap-2">
-                            {/* Admin direct delete — only on Manage tab */}
                             {activeTab === "manage" && (
                               <button
                                 onClick={(e) => deleteBlog(e, blog._id)}
@@ -410,7 +433,6 @@ export default function AdminBlogsClient() {
                               </>
                             )}
 
-                            {/* Both approve and reject deletion buttons */}
                             {activeTab === "deletion" && (
                               <>
                                 <button

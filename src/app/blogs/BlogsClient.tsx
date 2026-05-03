@@ -9,6 +9,16 @@ import { toast } from "react-hot-toast";
 
 const POSTS_PER_PAGE = 6;
 const CANCELLATION_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+const R2_URL = process.env.NEXT_PUBLIC_R2_PUBLIC_URL ?? "";
+
+interface InlineImage {
+  id: string;
+  placeholder: string;
+  r2Key?: string;
+  r2Url?: string;
+  strapiUrl?: string;
+  strapiId?: number;
+}
 
 interface Blog {
   _id: string;
@@ -16,7 +26,10 @@ interface Blog {
   slug: string;
   description?: string;
   categories: string[];
+  r2CoverKey?: string | null;
+  r2CoverUrl?: string | null;
   coverImage?: string;
+  strapiCoverUrl?: string | null;
   status: "draft" | "pending" | "approved" | "rejected" | "published";
   adminNotes?: string;
   createdAt: string;
@@ -30,9 +43,57 @@ interface Blog {
   pendingEdit?: {
     title: string;
     description?: string;
+    r2CoverKey?: string | null;
+    r2CoverUrl?: string | null;
     coverImage?: string;
+    strapiCoverUrl?: string | null;
     categories: string[];
   };
+}
+
+function resolveR2Url(
+  r2Url?: string | null,
+  r2Key?: string | null,
+): string | null {
+  if (r2Url) return r2Url;
+  if (r2Key && R2_URL) return `${R2_URL}/${r2Key}`;
+  return null;
+}
+
+function getCurrentLiveCover(blog: Blog): string | null {
+  return (
+    resolveR2Url(blog.r2CoverUrl, blog.r2CoverKey) ??
+    blog.strapiCoverUrl ??
+    blog.coverImage ??
+    null
+  );
+}
+
+function getPendingEditCover(blog: Blog): string | null {
+  const pending = blog.pendingEdit;
+  if (!pending) return getCurrentLiveCover(blog);
+
+  if (pending.r2CoverUrl !== undefined) {
+    if (pending.r2CoverUrl) return pending.r2CoverUrl;
+    if (pending.r2CoverKey) return resolveR2Url(undefined, pending.r2CoverKey);
+    return null;
+  }
+
+  if (pending.r2CoverKey !== undefined) {
+    return pending.r2CoverKey
+      ? resolveR2Url(undefined, pending.r2CoverKey)
+      : null;
+  }
+
+  if (pending.strapiCoverUrl !== undefined) {
+    return pending.strapiCoverUrl ?? null;
+  }
+
+  if (pending.coverImage !== undefined) {
+    return pending.coverImage ?? null;
+  }
+
+  return getCurrentLiveCover(blog);
 }
 
 function getRemainingSeconds(deletionRequestedAt?: string): number {
@@ -54,14 +115,12 @@ export default function BlogsClient() {
   const [blogs, setBlogs] = useState<Blog[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [countdowns, setCountdowns] = useState<Record<string, number>>({});
-  // openMenuId tracks which blog's kebab menu is open on mobile (if any)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   const pendingDeletions = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map(),
   );
 
-  // Close kebab menu when tapping outside
   useEffect(() => {
     const handler = () => setOpenMenuId(null);
     if (openMenuId) document.addEventListener("click", handler);
@@ -77,7 +136,6 @@ export default function BlogsClient() {
           const fetchedBlogs: Blog[] = data.blogs || [];
           setBlogs(fetchedBlogs);
 
-          // Seed countdowns directly here
           const initial: Record<string, number> = {};
           fetchedBlogs.forEach((b) => {
             if (b.deletionRequested && b.deletionRequestedAt) {
@@ -100,7 +158,6 @@ export default function BlogsClient() {
     fetchBlogs();
   }, []);
 
-  // Global 1-second ticker for all active countdowns
   useEffect(() => {
     const interval = setInterval(() => {
       setCountdowns((prev) => {
@@ -121,7 +178,6 @@ export default function BlogsClient() {
     return () => clearInterval(interval);
   }, []);
 
-  // Cleanup pending deletion timers on unmount
   useEffect(() => {
     const timers = pendingDeletions.current;
     return () => timers.forEach((t) => clearTimeout(t));
@@ -181,8 +237,9 @@ export default function BlogsClient() {
         !confirm(
           "This blog is published. Do you want to send a request to the Admin to delete it?",
         )
-      )
+      ) {
         return;
+      }
 
       try {
         const res = await fetch(`/api/blogs/${blog._id}`, { method: "DELETE" });
@@ -192,6 +249,7 @@ export default function BlogsClient() {
           toast.success("Deletion request sent to Admin");
           const requestedAt: string =
             data.deletionRequestedAt ?? new Date().toISOString();
+
           setBlogs((prev) =>
             prev
               ? prev.map((b) =>
@@ -207,6 +265,7 @@ export default function BlogsClient() {
                 )
               : [],
           );
+
           setCountdowns((prev) => ({
             ...prev,
             [blog._id]: Math.ceil(CANCELLATION_WINDOW_MS / 1000),
@@ -222,7 +281,6 @@ export default function BlogsClient() {
 
     if (!confirm("Are you sure you want to delete this blog?")) return;
 
-    // Optimistically remove the blog and reset page if current page becomes empty
     setBlogs((prev) => {
       const updated = prev ? prev.filter((b) => b._id !== blog._id) : [];
       const newTotalPages = Math.ceil(updated.length / POSTS_PER_PAGE);
@@ -348,7 +406,6 @@ export default function BlogsClient() {
       transition={{ duration: 0.6 }}
       className="min-h-screen bg-slate-950 text-gray-100 px-6 py-12"
     >
-      {/* HEADER */}
       <div className="max-w-7xl mx-auto flex justify-between items-center mb-10">
         <h1 className="text-4xl font-bold text-teal-400">Your Blogs</h1>
         <Link
@@ -359,29 +416,31 @@ export default function BlogsClient() {
         </Link>
       </div>
 
-      {/* BLOG GRID */}
       <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {currentBlogs.map((blog, i) => {
           const hasPendingEdit = blog.isEditPending && blog.pendingEdit;
+
           const displayTitle = hasPendingEdit
             ? blog.pendingEdit!.title
             : blog.title;
+
           const displayDescription = hasPendingEdit
             ? blog.pendingEdit!.description
             : blog.description;
+
           const displayCoverImage = hasPendingEdit
-            ? (blog.pendingEdit!.coverImage ?? blog.coverImage)
-            : blog.coverImage;
+            ? getPendingEditCover(blog)
+            : getCurrentLiveCover(blog);
+
           const displayCategories = hasPendingEdit
             ? blog.pendingEdit!.categories
             : blog.categories;
 
           const remainingSeconds = countdowns[blog._id] ?? 0;
           const canCancelDeletion =
-            blog.deletionRequested && remainingSeconds > 0;
+            !!blog.deletionRequested && remainingSeconds > 0;
 
           return (
-            // ── h-full ensures the wrapper fills the grid cell height ──
             <motion.div
               key={blog._id}
               initial={{ opacity: 0, y: 20 }}
@@ -389,15 +448,13 @@ export default function BlogsClient() {
               transition={{ delay: i * 0.05 }}
               className="h-full"
             >
-              {/* ── h-full makes every card stretch to match the tallest in the row ── */}
               <div
                 onClick={() => {
-                  if (openMenuId === blog._id) return; // don't navigate if menu is open
-                  router.push(`/blogs/my/${blog._id}`); // navigate to blog details page on click
+                  if (openMenuId === blog._id) return;
+                  router.push(`/blogs/my/${blog._id}`);
                 }}
                 className="group h-full flex flex-col bg-gray-900 border border-gray-800 rounded-xl overflow-hidden hover:scale-[1.02] hover:border-teal-500 transition-all duration-300 cursor-pointer relative"
               >
-                {/* ── DESKTOP: hover-reveal button strip ── */}
                 <div className="absolute top-3 right-3 z-20 hidden md:flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button
                     onClick={(e) => {
@@ -494,7 +551,6 @@ export default function BlogsClient() {
                   )}
                 </div>
 
-                {/* ── MOBILE: always-visible ⋮ kebab menu ── */}
                 <div className="absolute top-3 right-3 z-20 md:hidden">
                   <button
                     onClick={(e) => {
@@ -516,7 +572,6 @@ export default function BlogsClient() {
                     </svg>
                   </button>
 
-                  {/* DROPDOWN */}
                   <AnimatePresence>
                     {openMenuId === blog._id && (
                       <motion.div
@@ -527,7 +582,6 @@ export default function BlogsClient() {
                         onClick={(e) => e.stopPropagation()}
                         className="absolute right-0 mt-1 w-44 bg-[#1a1c29] border border-gray-700 rounded-xl shadow-2xl overflow-hidden text-sm"
                       >
-                        {/* Edit option */}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -554,7 +608,6 @@ export default function BlogsClient() {
 
                         <div className="border-t border-gray-700" />
 
-                        {/* Delete / Cancel option */}
                         {canCancelDeletion ? (
                           <button
                             onClick={(e) => {
@@ -589,7 +642,7 @@ export default function BlogsClient() {
                             className={`flex items-center gap-2.5 w-full px-4 py-3 text-left transition-colors ${
                               blog.deletionRequested
                                 ? "text-yellow-500 opacity-60 cursor-default"
-                                : "text-red-400"
+                                : "text-red-400 hover:bg-red-600/20"
                             }`}
                           >
                             <svg
@@ -616,7 +669,6 @@ export default function BlogsClient() {
                   </AnimatePresence>
                 </div>
 
-                {/* COVER IMAGE */}
                 {displayCoverImage ? (
                   <div className="relative w-full h-48 bg-gray-800 shrink-0">
                     <img
@@ -644,7 +696,6 @@ export default function BlogsClient() {
                 )}
 
                 <div className="p-5 flex flex-col flex-1">
-                  {/* STATUS ROW */}
                   <div className="flex justify-between items-start mb-3">
                     <span
                       className={`text-xs px-2 py-1 rounded border ${getStatusColor(blog.status)}`}
@@ -678,7 +729,6 @@ export default function BlogsClient() {
                     </div>
                   </div>
 
-                  {/* Blog rejection reason */}
                   {blog.status === "rejected" && blog.adminNotes && (
                     <div className="mb-3 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 text-xs text-red-400">
                       <span className="font-semibold">Rejection reason:</span>{" "}
@@ -686,7 +736,6 @@ export default function BlogsClient() {
                     </div>
                   )}
 
-                  {/* Deletion rejection reason */}
                   {blog.isDeletionRejected && blog.deletionRejectedNotes && (
                     <div className="mb-3 bg-orange-500/10 border border-orange-500/20 rounded-lg px-3 py-2 text-xs text-orange-400">
                       <span className="font-semibold">Deletion rejected:</span>{" "}
@@ -694,7 +743,6 @@ export default function BlogsClient() {
                     </div>
                   )}
 
-                  {/* Edit rejection reason */}
                   {blog.isEditRejected && blog.adminNotes && (
                     <div className="mb-3 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 text-xs text-red-400">
                       <span className="font-semibold">Edit rejected:</span>{" "}
@@ -702,17 +750,14 @@ export default function BlogsClient() {
                     </div>
                   )}
 
-                  {/* TITLE */}
                   <h2 className="text-xl font-semibold text-white mb-2 line-clamp-2 group-hover:text-teal-400 transition-colors">
                     {displayTitle}
                   </h2>
 
-                  {/* DESCRIPTION — clamped to 1 line so cards stay uniform */}
                   <p className="text-gray-400 text-sm line-clamp-1 mb-3">
                     {displayDescription || "No description."}
                   </p>
 
-                  {/* CATEGORIES */}
                   <div className="flex flex-wrap gap-2 mb-3">
                     {displayCategories?.length ? (
                       displayCategories.map((cat, index) => (
@@ -730,7 +775,6 @@ export default function BlogsClient() {
                     )}
                   </div>
 
-                  {/* DATE */}
                   <div className="text-sm text-gray-500 mb-3">
                     {new Date(blog.createdAt).toLocaleDateString("en-IN", {
                       day: "2-digit",
@@ -739,7 +783,6 @@ export default function BlogsClient() {
                     })}
                   </div>
 
-                  {/* STATUS MESSAGE — pushed to bottom of card */}
                   <div className="mt-auto text-sm text-gray-500 flex flex-col gap-1">
                     {blog.status === "published" &&
                       !blog.isEditPending &&
@@ -786,7 +829,6 @@ export default function BlogsClient() {
         })}
       </div>
 
-      {/* PAGINATION */}
       {totalPages > 1 && (
         <div className="max-w-7xl mx-auto mt-12">
           <BlogPagination

@@ -18,7 +18,9 @@ export async function GET(req: NextRequest) {
 
     const pendingBlogs = await Blog.find({ status: "pending" })
       .sort({ createdAt: -1 })
-      .select("title slug description categories coverImage author status createdAt")
+      .select(
+        "title slug description categories r2CoverKey coverImage strapiCoverUrl coverImageName inlineImages author status createdAt"
+      )
       .lean();
 
     return NextResponse.json({

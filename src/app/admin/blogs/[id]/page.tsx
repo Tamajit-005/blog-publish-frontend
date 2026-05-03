@@ -10,10 +10,15 @@ import rehypeRaw from "rehype-raw";
 import moment from "moment";
 import { toast } from "react-hot-toast";
 
+const R2_URL = process.env.NEXT_PUBLIC_R2_PUBLIC_URL ?? "";
+
 interface InlineImage {
   id: string;
   placeholder: string;
-  base64: string;
+  r2Key?: string;
+  r2Url?: string;
+  strapiUrl?: string;
+  strapiId?: number;
 }
 
 interface Blog {
@@ -22,7 +27,11 @@ interface Blog {
   slug: string;
   content: string;
   description?: string;
+  r2CoverKey?: string | null;
+  r2CoverUrl?: string | null;
   coverImage?: string;
+  coverImageName?: string;
+  strapiCoverUrl?: string | null;
   inlineImages?: InlineImage[];
   categories: string[];
   author: {
@@ -33,15 +42,16 @@ interface Blog {
   status: string;
   createdAt: string;
   updatedAt: string;
-
-  // Pending edit fields
   isEditPending?: boolean;
   pendingEdit?: {
     title: string;
     slug: string;
     content: string;
     description?: string;
-    coverImage?: string;
+    r2CoverKey?: string | null;
+    r2CoverUrl?: string | null;
+    coverImageName?: string;
+    strapiCoverUrl?: string | null;
     inlineImages?: InlineImage[];
     categories: string[];
   };
@@ -51,10 +61,19 @@ const handleCopyCode = async (code: string) => {
   try {
     await navigator.clipboard.writeText(code);
     toast.success("Code copied!");
-  } catch (err) {
+  } catch {
     toast.error("Copy failed");
   }
 };
+
+function resolveR2Url(
+  r2Url?: string | null,
+  r2Key?: string | null,
+): string | null {
+  if (r2Url) return r2Url;
+  if (r2Key && R2_URL) return `${R2_URL}/${r2Key}`;
+  return null;
+}
 
 export default function AdminBlogDetailPage() {
   const router = useRouter();
@@ -83,7 +102,7 @@ export default function AdminBlogDetailPage() {
           const data = await res.json();
           setError(data.error || "Failed to fetch blog");
         }
-      } catch (err) {
+      } catch {
         setError("Failed to fetch blog");
       } finally {
         setLoading(false);
@@ -98,16 +117,26 @@ export default function AdminBlogDetailPage() {
 
     if (currentBlog.inlineImages && currentBlog.inlineImages.length > 0) {
       currentBlog.inlineImages.forEach((img) => {
-        if (img.placeholder && img.base64) {
-          const cleanBase64 = img.base64.trim();
+        if (!img.placeholder) return;
+
+        const imgSrc =
+          img.r2Url ||
+          resolveR2Url(undefined, img.r2Key) ||
+          img.strapiUrl ||
+          (img.r2Key
+            ? `/api/admin/r2-image?key=${encodeURIComponent(img.r2Key)}`
+            : null);
+
+        if (imgSrc && content.includes(img.placeholder)) {
           content = content
             .split(img.placeholder)
             .join(
-              `<img src="${cleanBase64}" alt="Inline Image" class="rounded-lg w-full my-4 object-cover" />`,
+              `<img src="${imgSrc}" alt="Inline Image" class="rounded-lg w-full my-4 object-cover" />`,
             );
         }
       });
     }
+
     return content;
   };
 
@@ -127,7 +156,6 @@ export default function AdminBlogDetailPage() {
     );
   }
 
-  // If a pending edit exists, show that content — admin is reviewing the changes
   const displayBlog: Blog =
     blog.isEditPending && blog.pendingEdit
       ? {
@@ -136,13 +164,30 @@ export default function AdminBlogDetailPage() {
           slug: blog.pendingEdit.slug,
           content: blog.pendingEdit.content,
           description: blog.pendingEdit.description,
-          coverImage: blog.pendingEdit.coverImage ?? blog.coverImage,
-          inlineImages: blog.pendingEdit.inlineImages ?? [],
+          r2CoverKey:
+            blog.pendingEdit.r2CoverKey !== undefined
+              ? blog.pendingEdit.r2CoverKey
+              : blog.r2CoverKey,
+          r2CoverUrl:
+            blog.pendingEdit.r2CoverUrl !== undefined
+              ? blog.pendingEdit.r2CoverUrl
+              : blog.r2CoverUrl,
+          strapiCoverUrl:
+            blog.pendingEdit.strapiCoverUrl !== undefined
+              ? blog.pendingEdit.strapiCoverUrl
+              : blog.strapiCoverUrl,
+          inlineImages:
+            blog.pendingEdit.inlineImages ?? blog.inlineImages ?? [],
           categories: blog.pendingEdit.categories,
         }
       : blog;
 
-  // Use displayBlog for content rendering, blog for metadata (status, author, dates)
+  const coverSrc =
+    resolveR2Url(displayBlog.r2CoverUrl, displayBlog.r2CoverKey) ||
+    displayBlog.strapiCoverUrl ||
+    displayBlog.coverImage ||
+    null;
+
   const finalContent = getProcessedContent(displayBlog);
 
   return (
@@ -153,7 +198,6 @@ export default function AdminBlogDetailPage() {
       className="w-full min-h-screen bg-slate-950 text-gray-200"
     >
       <div className="max-w-3xl mx-auto p-6 pb-20">
-        {/* TITLE — from displayBlog */}
         <motion.h1
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -163,7 +207,6 @@ export default function AdminBlogDetailPage() {
           {displayBlog.title}
         </motion.h1>
 
-        {/* DATE — from root blog */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -175,7 +218,6 @@ export default function AdminBlogDetailPage() {
             : ""}
         </motion.div>
 
-        {/* STATUS BADGE — from root blog */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -197,7 +239,6 @@ export default function AdminBlogDetailPage() {
           </span>
         </motion.div>
 
-        {/* PENDING EDIT BANNER */}
         {blog.isEditPending && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -211,7 +252,6 @@ export default function AdminBlogDetailPage() {
           </motion.div>
         )}
 
-        {/* CATEGORIES — from displayBlog */}
         {displayBlog.categories && displayBlog.categories.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -230,8 +270,7 @@ export default function AdminBlogDetailPage() {
           </motion.div>
         )}
 
-        {/* COVER IMAGE — from displayBlog */}
-        {displayBlog.coverImage && (
+        {coverSrc && (
           <motion.div
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -239,14 +278,14 @@ export default function AdminBlogDetailPage() {
             className="relative h-72 w-full my-6"
           >
             <img
-              src={displayBlog.coverImage}
+              src={coverSrc}
               alt={displayBlog.title}
               className="rounded-lg w-full h-full object-cover"
+              loading="lazy"
             />
           </motion.div>
         )}
 
-        {/* DESCRIPTION — from displayBlog */}
         {displayBlog.description && (
           <motion.p
             initial={{ opacity: 0, y: 10 }}
@@ -258,7 +297,6 @@ export default function AdminBlogDetailPage() {
           </motion.p>
         )}
 
-        {/* CONTENT */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -350,10 +388,9 @@ export default function AdminBlogDetailPage() {
                     }
                     loading="lazy"
                     onError={(e) => {
-                      const safeSrc = String(src);
                       console.error(
                         "Image failed to load:",
-                        safeSrc.substring(0, 50) + "...",
+                        String(src).substring(0, 80),
                       );
                       e.currentTarget.style.display = "none";
                     }}
@@ -366,7 +403,6 @@ export default function AdminBlogDetailPage() {
           </Markdown>
         </motion.div>
 
-        {/* AUTHOR INFO */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -388,7 +424,6 @@ export default function AdminBlogDetailPage() {
           </p>
         </motion.div>
 
-        {/* BACK BUTTON */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

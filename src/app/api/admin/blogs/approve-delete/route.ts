@@ -5,10 +5,9 @@ import Blog from "@/models/Blog";
 import User from "@/models/User";
 import crypto from "crypto";
 import { getCachedJwt, setCachedJwt } from "@/lib/strapiJwtCache";
-
+import { bulkDeleteFromR2 } from "@/lib/r2";
 
 const STRAPI_URL = process.env.STRAPI_URL!.replace(/\/$/, "");
-
 
 async function loginOrRegister(user: any): Promise<string> {
   const cached = getCachedJwt(user.email);
@@ -44,14 +43,7 @@ async function loginOrRegister(user: any): Promise<string> {
   return data.jwt;
 }
 
-
-/**
- * ONE GET — batch lookup by URL hash ($in filter).
- */
-async function lookupIdsByUrls(
-  fileUrls: string[],
-  jwt: string
-): Promise<number[]> {
+async function lookupIdsByUrls(fileUrls: string[], jwt: string): Promise<number[]> {
   if (fileUrls.length === 0) return [];
 
   const hashMap = new Map<string, string>();
@@ -73,21 +65,16 @@ async function lookupIdsByUrls(
   const res = await fetch(`${STRAPI_URL}/api/upload/files?${hashParams}`, {
     headers: { Authorization: `Bearer ${jwt}` },
   });
-  if (!res.ok) { console.warn("Batch hash lookup failed:", res.statusText); return []; }
+  if (!res.ok) {
+    console.warn("Batch hash lookup failed:", res.statusText);
+    return [];
+  }
 
   const files = await res.json();
   return Array.isArray(files) ? files.map((f: any) => f.id) : [];
 }
 
-
-/**
- * ONE GET — batch lookup by filename ($in filter).
- * Used for legacy inline images that have no strapiUrl stored.
- */
-async function lookupIdsByNames(
-  filenames: string[],
-  jwt: string
-): Promise<number[]> {
+async function lookupIdsByNames(filenames: string[], jwt: string): Promise<number[]> {
   if (filenames.length === 0) return [];
 
   const nameParams = filenames
@@ -97,16 +84,15 @@ async function lookupIdsByNames(
   const res = await fetch(`${STRAPI_URL}/api/upload/files?${nameParams}`, {
     headers: { Authorization: `Bearer ${jwt}` },
   });
-  if (!res.ok) { console.warn("Batch name lookup failed:", res.statusText); return []; }
+  if (!res.ok) {
+    console.warn("Batch name lookup failed:", res.statusText);
+    return [];
+  }
 
   const files = await res.json();
   return Array.isArray(files) ? files.map((f: any) => f.id) : [];
 }
 
-
-/**
- * ONE POST — bulk delete all collected file IDs via custom Strapi endpoint.
- */
 async function bulkDeleteStrapiFiles(ids: number[], jwt: string): Promise<void> {
   if (ids.length === 0) return;
 
@@ -126,22 +112,39 @@ async function bulkDeleteStrapiFiles(ids: number[], jwt: string): Promise<void> 
   }
 }
 
-
 function filenameFromBase64(base64?: string, fallback = "image"): string {
   if (!base64) return `${fallback}.png`;
   const nameMatch = base64.match(/name=([^;]+);base64,/);
   if (nameMatch?.[1]) {
-    try { return decodeURIComponent(nameMatch[1]); } catch { return nameMatch[1]; }
+    try {
+      return decodeURIComponent(nameMatch[1]);
+    } catch {
+      return nameMatch[1];
+    }
   }
   const mimeMatch = base64.match(/^data:(image\/[^;]+);base64,/);
   const mime = mimeMatch?.[1] || "image/png";
   const extMap: Record<string, string> = {
-    "image/png": "png", "image/jpeg": "jpg", "image/jpg": "jpg",
-    "image/webp": "webp", "image/gif": "gif", "image/svg+xml": "svg",
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/webp": "webp",
+    "image/gif": "gif",
+    "image/svg+xml": "svg",
   };
   return `${fallback}.${extMap[mime] ?? "png"}`;
 }
 
+function collectR2Keys(blog: any): string[] {
+  return Array.from(
+    new Set([
+      ...(blog.r2CoverKey ? [blog.r2CoverKey] : []),
+      ...((blog.inlineImages ?? []).map((img: any) => img.r2Key).filter(Boolean)),
+      ...(blog.pendingEdit?.r2CoverKey ? [blog.pendingEdit.r2CoverKey] : []),
+      ...((blog.pendingEdit?.inlineImages ?? []).map((img: any) => img.r2Key).filter(Boolean)),
+    ])
+  );
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -164,11 +167,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Author not found" }, { status: 404 });
 
     const jwt = await loginOrRegister(user);
+    const r2KeysToDelete = collectR2Keys(blog);
 
     const strapiDocId = blog.strapiId;
     if (!strapiDocId) {
-      console.warn("⚠️ No strapiId — skipping Strapi deletion, cleaning MongoDB only.");
+      console.warn("⚠️ No strapiId — skipping Strapi deletion, cleaning MongoDB + R2 only.");
       await Blog.findByIdAndDelete(blogId);
+      if (r2KeysToDelete.length > 0) {
+        bulkDeleteFromR2(r2KeysToDelete).catch((err) =>
+          console.error("R2 cleanup failed during approve-delete:", err)
+        );
+      }
       return NextResponse.json({ message: "Blog deleted (not in Strapi)" });
     }
 
@@ -186,7 +195,7 @@ export async function POST(req: NextRequest) {
     }
     console.log("Strapi blog deleted:", strapiDocId);
 
-    // STEP 2 — Collect URLs and legacy filenames
+    // STEP 2 — Collect Strapi media URLs and legacy filenames
     const urlsToDelete: string[] = [];
     const legacyFilenames: string[] = [];
 
@@ -200,22 +209,29 @@ export async function POST(req: NextRequest) {
       if (img.strapiUrl) {
         urlsToDelete.push(img.strapiUrl);
       } else {
-        const filename = filenameFromBase64(img.base64, img.id);
+        const filename = filenameFromBase64((img as any).base64, img.id);
         if (filename) legacyFilenames.push(filename);
       }
     }
 
-    // STEP 3 — ONE GET for URL-based + ONE GET for name-based in parallel
+    // STEP 3 — Lookup Strapi media IDs in parallel
     const [urlIds, nameIds] = await Promise.all([
       lookupIdsByUrls(urlsToDelete, jwt),
       lookupIdsByNames(legacyFilenames, jwt),
     ]);
 
-    // STEP 4 — ONE POST bulk delete all collected IDs
-    await bulkDeleteStrapiFiles([...urlIds, ...nameIds], jwt);
+    // STEP 4 — Bulk delete Strapi media (deduplicated)
+    await bulkDeleteStrapiFiles([...new Set([...urlIds, ...nameIds])], jwt);
 
     // STEP 5 — Delete MongoDB doc
     await Blog.findByIdAndDelete(blogId);
+
+    // STEP 6 — Fire-and-forget R2 cleanup (live + pendingEdit assets)
+    if (r2KeysToDelete.length > 0) {
+      bulkDeleteFromR2(r2KeysToDelete).catch((err) =>
+        console.error("R2 cleanup failed during approve-delete:", err)
+      );
+    }
 
     return NextResponse.json({ message: "Blog permanently deleted" });
   } catch (error: any) {

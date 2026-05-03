@@ -3,6 +3,22 @@ import { checkUserAuth } from "@/lib/adminAuth";
 import dbConnect from "@/lib/mongoose";
 import Blog from "@/models/Blog";
 import { sendBlogEmail } from "@/lib/email";
+import { bulkDeleteFromR2 } from "@/lib/r2";
+
+function collectR2Keys(blog: any): string[] {
+  return Array.from(
+    new Set([
+      // Live cover
+      ...(blog.r2CoverKey ? [blog.r2CoverKey] : []),
+      // Live inline images
+      ...((blog.inlineImages ?? []).map((img: any) => img.r2Key).filter(Boolean)),
+      // Pending edit cover (if any draft was in progress)
+      ...(blog.pendingEdit?.r2CoverKey ? [blog.pendingEdit.r2CoverKey] : []),
+      // Pending edit inline images
+      ...((blog.pendingEdit?.inlineImages ?? []).map((img: any) => img.r2Key).filter(Boolean)),
+    ])
+  );
+}
 
 export async function GET(
   req: NextRequest,
@@ -73,13 +89,11 @@ export async function DELETE(
 
     if (blog.status === "published" || blog.status === "approved") {
       blog.deletionRequested = true;
-      blog.deletionRequestedAt = new Date(); // stamp the request time
-      // Clear any previous rejection state when user re-requests deletion
+      blog.deletionRequestedAt = new Date();
       blog.isDeletionRejected = false;
       blog.deletionRejectedNotes = undefined;
       await blog.save();
 
-      // Send email notification to admins about deletion request
       await sendBlogEmail({
         type: "delete_requested",
         blogTitle: blog.title,
@@ -97,7 +111,15 @@ export async function DELETE(
       });
     }
 
+    const r2KeysToClean = collectR2Keys(blog);
+
     await Blog.findByIdAndDelete(id);
+
+    if (r2KeysToClean.length > 0) {
+      bulkDeleteFromR2(r2KeysToClean).catch((err) =>
+        console.error("R2 cleanup failed after blog delete:", err)
+      );
+    }
 
     return NextResponse.json({
       message: "Blog deleted successfully",

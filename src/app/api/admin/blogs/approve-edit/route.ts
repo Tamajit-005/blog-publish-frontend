@@ -6,11 +6,18 @@ import User from "@/models/User";
 import crypto from "crypto";
 import { FIXED_CATEGORIES } from "@/lib/categories";
 import { getCachedJwt, setCachedJwt } from "@/lib/strapiJwtCache";
+import { bulkDeleteFromR2 } from "@/lib/r2";
+import { bulkR2ToStrapi } from "@/lib/r2-image-processor";
 
-
-const STRAPI_URL = process.env.STRAPI_URL!.replace(new RegExp("/$"), "");
+const STRAPI_URL = process.env.STRAPI_URL!.replace(/\/$/, "");
 const MAX_CONTENT_CHARS = 100000;
+const R2_PUBLIC_URL = (process.env.NEXT_PUBLIC_R2_PUBLIC_URL ?? "").replace(/\/$/, "");
 
+function resolveR2Url(r2Url?: string | null, r2Key?: string | null): string | null {
+  if (r2Url) return r2Url;
+  if (r2Key && R2_PUBLIC_URL) return `${R2_PUBLIC_URL}/${r2Key}`;
+  return null;
+}
 
 async function loginOrRegister(user: any): Promise<string> {
   const cached = getCachedJwt(user.email);
@@ -46,98 +53,28 @@ async function loginOrRegister(user: any): Promise<string> {
   return data.jwt;
 }
 
-
 function sanitizeHtmlDataSrc(content: string) {
   return content.replace(/src="data:[^"]*"/g, "");
 }
-
 
 function removeStrayMarkdownBase64(content: string) {
   return content.replace(/!\[.*?\]\(data:[^)]*\)/g, "![image removed]");
 }
 
-
-function filenameFromBase64(base64?: string, fallback = "image"): string {
-  if (!base64) return `${fallback}.png`;
-  const nameMatch = base64.match(/name=([^;]+);base64/);
-  if (nameMatch?.[1]) {
-    try { return decodeURIComponent(nameMatch[1]); } catch { return nameMatch[1]; }
-  }
-  const mimeMatch = base64.match(new RegExp("^data:(image/[^;]+);base64,"));
-  const mime = mimeMatch?.[1] ?? "image/png";
-  const extMap: Record<string, string> = {
-    "image/png": "png", "image/jpeg": "jpg", "image/jpg": "jpg",
-    "image/webp": "webp", "image/gif": "gif", "image/svg+xml": "svg",
-  };
-  return `${fallback}.${extMap[mime] ?? "png"}`;
-}
-
-
-function extractFileUrl(fileObj: any): string | null {
-  if (!fileObj) return null;
-  const url =
-    (typeof fileObj === "string" ? fileObj : null) ??
-    fileObj.url ?? fileObj.attributes?.url ?? fileObj.data?.attributes?.url ?? null;
-  if (!url) return null;
-  return new RegExp("^https?://", "i").test(url) ? url : `${STRAPI_URL}${url}`;
-}
-
-
-function resolveCategoryIds(slugs: string[]): number[] {
+function resolveCategoryIds(slugs: string[]): any[] {
   return slugs
-    .map((slug) => FIXED_CATEGORIES.find((c) => c.slug === slug)?.id)
-    .filter((id): id is number => id !== undefined);
+    .map((slug) => {
+      const cat = FIXED_CATEGORIES.find((c) => c.slug === slug);
+      return cat ? (cat.documentId || cat.id) : undefined;
+    })
+    .filter((val) => val !== undefined);
 }
 
-
-/**
- * ONE POST — all images (cover + inline) batched into a single FormData.
- * Strapi returns an ordered array matching append order.
- */
-async function batchUploadImages(
-  images: { key: string; blob: Blob; filename: string }[],
-  jwt: string
-): Promise<Map<string, { id: number; url: string }>> {
-  const result = new Map<string, { id: number; url: string }>();
-  if (images.length === 0) return result;
-
-  const form = new FormData();
-  for (const img of images) {
-    form.append("files", img.blob, img.filename);
-  }
-
-  const uploadRes = await fetch(`${STRAPI_URL}/api/upload`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${jwt}` },
-    body: form,
-  });
-  if (!uploadRes.ok) throw new Error("Batch upload failed: " + await uploadRes.text());
-
-  const uploaded: any[] = await uploadRes.json();
-  if (!Array.isArray(uploaded)) return result;
-
-  for (let i = 0; i < images.length && i < uploaded.length; i++) {
-    const fileObj = uploaded[i];
-    const url = extractFileUrl(fileObj);
-    if (fileObj?.id && url) {
-      result.set(images[i].key, { id: fileObj.id, url });
-    }
-  }
-
-  return result;
-}
-
-
-/**
- * ONE GET — resolve all old file URLs → Strapi IDs via batch hash lookup.
- * Runs in parallel with batchUploadImages.
- */
 async function lookupStrapiFileIds(
   fileUrls: string[],
   jwt: string
 ): Promise<{ id: number; hash: string }[]> {
   if (fileUrls.length === 0) return [];
-
   const hashMap = new Map<string, string>();
   for (const fileUrl of fileUrls) {
     try {
@@ -150,59 +87,31 @@ async function lookupStrapiFileIds(
     }
   }
   if (hashMap.size === 0) return [];
-
   const hashParams = Array.from(hashMap.keys())
     .map((h, i) => `filters[hash][$in][${i}]=${encodeURIComponent(h)}`)
     .join("&");
-
   const searchRes = await fetch(`${STRAPI_URL}/api/upload/files?${hashParams}`, {
     headers: { Authorization: `Bearer ${jwt}` },
   });
-  if (!searchRes.ok) {
-    console.warn("Batch file lookup failed:", searchRes.statusText);
-    return [];
-  }
-
+  if (!searchRes.ok) return [];
   const files: { id: number; hash: string }[] = await searchRes.json();
   return Array.isArray(files) ? files : [];
 }
 
-
-/**
- * ONE DELETE — bulk delete via custom Strapi extension at /api/media/bulk-delete.
- * Requires src/extensions/upload/strapi-server.ts in the Strapi project.
- * Must only run AFTER the Strapi PUT completes (FK constraint safety).
- */
-async function deleteStrapiFiles(
-  files: { id: number; hash: string }[],
-  jwt: string
-): Promise<void> {
+async function deleteStrapiFiles(files: { id: number; hash: string }[], jwt: string): Promise<void> {
   if (files.length === 0) return;
-
   const ids = files.map((f) => f.id);
-
-  const res = await fetch(`${STRAPI_URL}/api/media/bulk-delete`, {
+  await fetch(`${STRAPI_URL}/api/media/bulk-delete`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${jwt}`,
-      "Content-Type": "application/json",
-    },
+    headers: { Authorization: `Bearer ${jwt}`, "Content-Type": "application/json" },
     body: JSON.stringify({ ids }),
   });
-
-  if (!res.ok) {
-    console.warn("Bulk delete failed:", await res.text());
-  } else {
-    console.log(`🗑️ Bulk deleted Strapi file ids: [${ids.join(", ")}]`);
-  }
 }
-
 
 export async function POST(req: NextRequest) {
   try {
     const auth = await checkAdminAuth();
-    if (!auth.authorized)
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    if (!auth.authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
     const { blogId } = await req.json();
     await dbConnect();
@@ -212,164 +121,172 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No pending edit found" }, { status: 400 });
 
     const user = await User.findOne({ email: blog.author.email }).select("+strapi.password");
-    if (!user)
-      return NextResponse.json({ error: "Author not found" }, { status: 404 });
+    if (!user) return NextResponse.json({ error: "Author not found" }, { status: 404 });
 
-    // STEP 1 — Strapi auth
     const jwt = await loginOrRegister(user);
     const edits = blog.pendingEdit;
+    const r2KeysToDelete: string[] = [];
 
-    // STEP 2 — Classify images + compute urlsToDelete EARLY
-    const needsNewCover =
-      edits.coverImage != null && edits.coverImage !== "" && edits.coverImage.startsWith("data:");
-    const coverRemoved =
-      edits.coverImage === "" || edits.coverImage === null || edits.coverImage === undefined;
-    const oldCoverUrl = blog.strapiCoverUrl;
-
-    const activeImgs = (edits.inlineImages ?? []).filter(
-      (img) =>
-        img?.base64 && img?.placeholder && (edits.content || "").includes(img.placeholder)
-    );
-    const toUploadImgs = activeImgs.filter(
-      (img) => !img.strapiUrl && img.base64?.startsWith("data:")
+    const rawActiveImgs = (edits.inlineImages ?? []).filter(
+      (img: any) => img?.placeholder && (edits.content || "").includes(img.placeholder)
     );
 
+    const uploadBatch: { r2Key: string; filename: string }[] = [];
+    if (edits.r2CoverKey) {
+      uploadBatch.push({
+        r2Key: edits.r2CoverKey,
+        filename: edits.coverImageName ?? `cover.${edits.r2CoverKey.split(".").pop() ?? "jpg"}`,
+      });
+    }
+
+    const inlineSlots: { img: any; batchIndex: number }[] = [];
+    for (const img of rawActiveImgs) {
+      if (img.r2Key && !img.strapiUrl) {
+        inlineSlots.push({ img, batchIndex: uploadBatch.length });
+        uploadBatch.push({
+          r2Key: img.r2Key,
+          filename: `inline-${img.id}.${img.r2Key.split(".").pop() ?? "jpg"}`,
+        });
+      }
+    }
+
+    let uploadResults: any[] = [];
+    if (uploadBatch.length > 0) {
+      uploadResults = await bulkR2ToStrapi(uploadBatch);
+    }
+
+    let resolvedCoverUrl: string | undefined = edits.strapiCoverUrl ?? undefined;
+    let resolvedCoverId: number | undefined = undefined;
+    if (edits.r2CoverKey) {
+      resolvedCoverUrl = uploadResults[0]?.strapiUrl;
+      resolvedCoverId = uploadResults[0]?.strapiId;
+      r2KeysToDelete.push(edits.r2CoverKey);
+    }
+
+    // FIX: Explicitly assign fields rather than using the ...spread operator on Mongoose Documents
+    const activeImgs: any[] = rawActiveImgs.map((doc: any) => {
+      const slot = inlineSlots.find((s) => s.img === doc);
+      if (slot) {
+        if (doc.r2Key) r2KeysToDelete.push(doc.r2Key);
+        return {
+          id: doc.id,
+          placeholder: doc.placeholder,
+          r2Key: null,
+          r2Url: null,
+          strapiUrl: uploadResults[slot.batchIndex]?.strapiUrl,
+          strapiId: uploadResults[slot.batchIndex]?.strapiId,
+        };
+      }
+      return {
+        id: doc.id,
+        placeholder: doc.placeholder,
+        r2Key: doc.r2Key ?? null,
+        r2Url: doc.r2Url ?? null,
+        strapiUrl: doc.strapiUrl ?? null,
+        strapiId: doc.strapiId ?? null,
+      };
+    });
+
+    const hadCover = !!blog.strapiCoverUrl;
+    const editHasCover = !!resolvedCoverUrl;
+    const coverRemoved = hadCover && !editHasCover;
+    const coverChanged = editHasCover && resolvedCoverUrl !== blog.strapiCoverUrl;
+    const oldCoverUrl = blog.strapiCoverUrl as string | undefined;
+
+    if ((coverRemoved || coverChanged) && blog.r2CoverKey) r2KeysToDelete.push(blog.r2CoverKey);
+
+    const keptInlineStrapiUrls = new Set<string>(activeImgs.map((img: any) => img.strapiUrl).filter(Boolean));
     const urlsToDelete: string[] = [];
-    if ((coverRemoved || needsNewCover) && oldCoverUrl) urlsToDelete.push(oldCoverUrl);
+    if ((coverRemoved || coverChanged) && oldCoverUrl) urlsToDelete.push(oldCoverUrl);
 
-    const oldInlineStrapiUrls = new Set<string>(
-      (blog.inlineImages ?? []).map((img: any) => img.strapiUrl).filter(Boolean)
-    );
-    const keptInlineStrapiUrls = new Set<string>(
-      activeImgs.map((img: any) => img.strapiUrl).filter(Boolean)
-    );
+    const oldInlineStrapiUrls = new Set<string>((blog.inlineImages ?? []).map((img: any) => img.strapiUrl).filter(Boolean));
     for (const oldUrl of oldInlineStrapiUrls) {
       if (!keptInlineStrapiUrls.has(oldUrl)) urlsToDelete.push(oldUrl);
     }
 
-    // STEP 3 — Decode all base64 blobs locally in parallel (memory-only, no network)
-    const blobJobs: Promise<{ key: string; blob: Blob; filename: string } | null>[] = [];
-
-    if (needsNewCover) {
-      blobJobs.push(
-        fetch(edits.coverImage!)
-          .then(async (r) => ({
-            key: "cover",
-            blob: await r.blob(),
-            filename: edits.coverImageName || filenameFromBase64(edits.coverImage),
-          }))
-          .catch((e) => { console.error("Cover decode failed:", e); return null; })
-      );
-    }
-
-    for (const img of toUploadImgs) {
-      blobJobs.push(
-        fetch(img.base64)
-          .then(async (r) => ({
-            key: img.id as string,
-            blob: await r.blob(),
-            filename: filenameFromBase64(img.base64, img.id),
-          }))
-          .catch((e) => { console.error("Inline decode failed for", img.id, e); return null; })
-      );
-    }
-
-    const imagesToUpload = (await Promise.all(blobJobs)).filter(
-      (x): x is { key: string; blob: Blob; filename: string } => x !== null
-    );
-
-    // PHASE 1 — ONE POST (all images batched) + ONE GET (hash lookup) in parallel
-    const [uploadResultMap, filesToDelete] = await Promise.all([
-      batchUploadImages(imagesToUpload, jwt),
-      lookupStrapiFileIds(urlsToDelete, jwt),
-    ]);
-
-    // STEP 4 — Build Strapi content + activeInlineImages list
     let strapiContent = sanitizeHtmlDataSrc(edits.content || "");
-    const activeInlineImages: any[] = [];
+    let mongoContent = removeStrayMarkdownBase64(sanitizeHtmlDataSrc(edits.content || ""));
 
     for (const img of activeImgs) {
-      const strapiUrl = img.strapiUrl || uploadResultMap.get(img.id)?.url || null;
-      if (strapiUrl) {
-        strapiContent = strapiContent.split(img.placeholder).join(`![image](${strapiUrl})`);
-        activeInlineImages.push({ ...img, strapiUrl });
-      } else {
-        activeInlineImages.push(img);
+      const strapiUrl = img.strapiUrl;
+      
+      // Safety skip
+      if (!strapiUrl || !img.placeholder) {
+          console.warn("Skipping replacement: missing strapiUrl or placeholder", img.id);
+          continue;
       }
+      
+      const escapedPlaceholder = img.placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(escapedPlaceholder, 'g');
+
+      strapiContent = strapiContent.replace(regex, `![image](${strapiUrl})`);
+
+      const r2Url = resolveR2Url(img.r2Url, img.r2Key);
+      const mongoImgUrl = r2Url ?? strapiUrl;
+      mongoContent = mongoContent.replace(regex, `![image](${mongoImgUrl})`);
     }
 
     strapiContent = removeStrayMarkdownBase64(strapiContent);
-    if (strapiContent.length > MAX_CONTENT_CHARS)
-      strapiContent = strapiContent.slice(0, MAX_CONTENT_CHARS);
+    mongoContent = removeStrayMarkdownBase64(mongoContent);
 
-    const mongoContent = removeStrayMarkdownBase64(edits.content || "");
+    if (strapiContent.length > MAX_CONTENT_CHARS) strapiContent = strapiContent.slice(0, MAX_CONTENT_CHARS);
 
-    // STEP 5 — Cover resolution
-    const coverUpload = uploadResultMap.get("cover") ?? null;
-    const newCoverUrl = coverUpload?.url ?? null;
-    const newCoverId = coverUpload?.id ?? null;
-
-    // STEP 6 — Category IDs (sync, no API call)
-    const categoryIds = resolveCategoryIds(edits.categories ?? []);
-
-    // STEP 7 — Build Strapi update payload
     const strapiDocId = blog.strapiId;
-    if (!strapiDocId)
-      throw new Error("No strapiId stored — cannot update blog in Strapi.");
-
     const updatePayload: any = {
       title: edits.title,
       slug: edits.slug,
       description: edits.description,
       content: strapiContent,
-      category: categoryIds,
+      category: resolveCategoryIds(edits.categories ?? []),
     };
 
-    if (newCoverId) {
-      updatePayload.cover = newCoverId;
-    } else if (coverRemoved) {
-      updatePayload.cover = null;
+    if (coverChanged) updatePayload.cover = resolvedCoverId;
+    else if (coverRemoved) updatePayload.cover = null;
+
+    const [strapiUpdateRes, filesToDelete] = await Promise.all([
+      fetch(`${STRAPI_URL}/api/blogs/${strapiDocId}`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${jwt}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ data: updatePayload }),
+      }),
+      lookupStrapiFileIds(urlsToDelete, jwt),
+    ]);
+
+    if (!strapiUpdateRes.ok) {
+      const errText = await strapiUpdateRes.text();
+      console.error("Strapi update rejected. Response text:", errText);
+      throw new Error(`Strapi update failed: ${errText}`);
     }
 
-    // PHASE 2a — PUT must complete before deletes (FK constraint safety)
-    const strapiUpdate = await fetch(`${STRAPI_URL}/api/blogs/${strapiDocId}`, {
-      method: "PUT",
-      headers: { Authorization: `Bearer ${jwt}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ data: updatePayload }),
-    });
-    if (!strapiUpdate.ok)
-      throw new Error("Strapi update failed: " + await strapiUpdate.text());
-
-    // PHASE 2b — ONE DELETE (bulk) after PUT (IDs pre-resolved in PHASE 1)
     await deleteStrapiFiles(filesToDelete, jwt);
 
-    // STEP 8 — Apply edits to MongoDB
     blog.title = edits.title;
     blog.slug = edits.slug;
     blog.description = edits.description;
     blog.content = mongoContent;
     blog.categories = edits.categories;
-    blog.inlineImages = activeInlineImages;
+    blog.inlineImages = activeImgs; // Now a clean Javascript array of plain objects
 
-    if (coverRemoved) {
-      blog.coverImage = undefined;
+    if (coverRemoved || coverChanged) {
+      blog.strapiCoverUrl = resolvedCoverUrl ?? undefined;
+      blog.strapiCoverId = resolvedCoverId ?? undefined;
+      blog.r2CoverKey = undefined;
+      blog.r2CoverUrl = undefined;
       blog.coverImageName = undefined;
-      blog.strapiCoverUrl = undefined;
-    } else if (newCoverUrl) {
-      blog.coverImage = edits.coverImage;
-      blog.strapiCoverUrl = newCoverUrl;
-      if (edits.coverImageName) blog.coverImageName = edits.coverImageName;
     }
 
-    blog.adminNotes = undefined;
     blog.isEditPending = false;
     blog.pendingEdit = undefined;
-
     await blog.save();
 
-    return NextResponse.json({ success: true, message: "Edit approved and published" });
+    const uniqueR2Keys = [...new Set(r2KeysToDelete.filter(Boolean))];
+    if (uniqueR2Keys.length > 0) {
+      bulkDeleteFromR2(uniqueR2Keys).catch((err) => console.error("R2 cleanup failed:", err));
+    }
+
+    return NextResponse.json({ success: true, message: "Edit approved" });
   } catch (err: any) {
-    console.error("Approve-edit error:", err);
-    return NextResponse.json({ error: err.message ?? "Approval failed" }, { status: 500 });
+    console.error("Approve-edit critical error:", err);
+    return NextResponse.json({ error: err.message || "Approval failed" }, { status: 500 });
   }
 }

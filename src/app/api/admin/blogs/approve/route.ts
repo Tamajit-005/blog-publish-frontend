@@ -6,12 +6,11 @@ import User from "@/models/User";
 import crypto from "crypto";
 import { FIXED_CATEGORIES } from "@/lib/categories";
 import { getCachedJwt, setCachedJwt } from "@/lib/strapiJwtCache";
+import { bulkR2ToStrapi } from "@/lib/r2-image-processor";
 
-
-const STRAPI_URL = process.env.STRAPI_URL!.replace(new RegExp("/$"), "");
+const STRAPI_URL = process.env.STRAPI_URL!.replace(/\/$/, "");
 const STRAPI_ADMIN_TOKEN = process.env.STRAPI_API_TOKEN!;
 const MAX_CONTENT_CHARS = 100_000;
-
 
 async function loginOrRegister(user: any): Promise<string> {
   const cached = getCachedJwt(user.email);
@@ -35,7 +34,6 @@ async function loginOrRegister(user: any): Promise<string> {
   if (user.strapi?.password && user.strapi?.userId) {
     console.warn(`[Strapi] Login failed for ${user.email} — attempting admin password reset`);
     const newPassword = crypto.randomBytes(24).toString("hex");
-
     const resetRes = await fetch(`${STRAPI_URL}/api/users/${user.strapi.userId}`, {
       method: "PUT",
       headers: {
@@ -44,7 +42,6 @@ async function loginOrRegister(user: any): Promise<string> {
       },
       body: JSON.stringify({ password: newPassword }),
     });
-
     if (resetRes.ok) {
       const retryRes = await fetch(`${STRAPI_URL}/api/auth/local`, {
         method: "POST",
@@ -59,7 +56,6 @@ async function loginOrRegister(user: any): Promise<string> {
         return data.jwt;
       }
     }
-
     console.warn(`[Strapi] Admin reset failed — re-registering.`);
     user.strapi = undefined;
     password = crypto.randomBytes(24).toString("hex");
@@ -70,7 +66,8 @@ async function loginOrRegister(user: any): Promise<string> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email: user.email, username: user.username, password }),
   });
-  if (!registerRes.ok) throw new Error(`Strapi register failed: ${await registerRes.text()}`);
+  if (!registerRes.ok)
+    throw new Error(`Strapi register failed: ${await registerRes.text()}`);
 
   const data = await registerRes.json();
   user.strapi = { userId: data.user?.id, password };
@@ -79,78 +76,19 @@ async function loginOrRegister(user: any): Promise<string> {
   return data.jwt;
 }
 
-
-function filenameFromBase64(base64?: string, fallback = "image"): string {
-  if (!base64) return `${fallback}.png`;
-  const nameMatch = base64.match(/name=([^;]+);base64,/);
-  if (nameMatch?.[1]) {
-    try { return decodeURIComponent(nameMatch[1]); } catch { return nameMatch[1]; }
-  }
-  const mimeMatch = base64.match(new RegExp("^data:(image/[^;]+);base64,"));
-  const mime = mimeMatch?.[1] || "image/png";
-  const extMap: Record<string, string> = {
-    "image/png": "png", "image/jpeg": "jpg", "image/jpg": "jpg",
-    "image/webp": "webp", "image/gif": "gif", "image/svg+xml": "svg",
-  };
-  return `${fallback}.${extMap[mime] || "png"}`;
-}
-
-
-function extractFileUrl(fileObj: any): string | null {
-  if (!fileObj) return null;
-  const url =
-    (typeof fileObj === "string" ? fileObj : null) ??
-    fileObj.url ?? fileObj.attributes?.url ?? fileObj.data?.attributes?.url ?? null;
-  if (!url) return null;
-  return new RegExp("^https?://", "i").test(url) ? url : `${STRAPI_URL}${url}`;
-}
-
-
-/**
- * ONE POST — cover + all inline images in a single FormData.
- * Key is "cover" for the cover image, or img.id for each inline image.
- * Strapi returns an ordered array matching the append order.
- */
-async function batchUploadImages(
-  images: { key: string; blob: Blob; filename: string }[],
-  jwt: string
-): Promise<Map<string, { id: number; url: string }>> {
-  const result = new Map<string, { id: number; url: string }>();
-  if (images.length === 0) return result;
-
-  const form = new FormData();
-  for (const img of images) {
-    form.append("files", img.blob, img.filename);
-  }
-
-  const uploadRes = await fetch(`${STRAPI_URL}/api/upload`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${jwt}` },
-    body: form,
-  });
-  if (!uploadRes.ok) throw new Error(`Batch upload failed: ${await uploadRes.text()}`);
-
-  const uploaded: any[] = await uploadRes.json();
-  if (!Array.isArray(uploaded)) return result;
-
-  for (let i = 0; i < images.length && i < uploaded.length; i++) {
-    const fileObj = uploaded[i];
-    const url = extractFileUrl(fileObj);
-    if (fileObj?.id && url) {
-      result.set(images[i].key, { id: fileObj.id, url });
-    }
-  }
-
-  return result;
-}
-
-
 function resolveCategoryIds(slugs: string[]): number[] {
   return slugs
     .map((slug) => FIXED_CATEGORIES.find((c) => c.slug === slug)?.id)
     .filter((id): id is number => id !== undefined);
 }
 
+const R2_PUBLIC_URL = (process.env.NEXT_PUBLIC_R2_PUBLIC_URL ?? "").replace(/\/$/, "");
+
+function resolveR2Url(r2Url?: string | null, r2Key?: string | null): string | null {
+  if (r2Url) return r2Url;
+  if (r2Key && R2_PUBLIC_URL) return `${R2_PUBLIC_URL}/${r2Key}`;
+  return null;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -172,70 +110,78 @@ export async function POST(req: NextRequest) {
     if (!user)
       return NextResponse.json({ error: "Author not found" }, { status: 404 });
 
-    // STEP 1 — Strapi auth (JWT cached after first call)
     const jwt = await loginOrRegister(user);
 
-    // STEP 2 — Decode all base64 blobs locally in parallel (memory-only, no network)
+    const coverR2Key: string | undefined = blog.r2CoverKey;
+    const coverR2Url: string | undefined = blog.r2CoverUrl;
     const inlineImages: any[] = blog.inlineImages ?? [];
-    const blobJobs: Promise<{ key: string; blob: Blob; filename: string } | null>[] = [];
 
-    if (blog.coverImage?.startsWith("data:")) {
-      blobJobs.push(
-        fetch(blog.coverImage)
-          .then(async (r) => ({
-            key: "cover",
-            blob: await r.blob(),
-            filename: blog.coverImageName || filenameFromBase64(blog.coverImage),
-          }))
-          .catch((e) => { console.error("Cover decode failed:", e); return null; })
-      );
+    type UploadSlot = { r2Key: string; filename: string };
+    const uploadBatch: UploadSlot[] = [];
+
+    if (coverR2Key) {
+      uploadBatch.push({
+        r2Key: coverR2Key,
+        filename: blog.coverImageName ?? `cover.${coverR2Key.split(".").pop() ?? "jpg"}`,
+      });
     }
 
+    const inlineSlots: { img: any; batchIndex: number }[] = [];
     for (const img of inlineImages) {
-      if (!img?.base64) continue;
-      blobJobs.push(
-        fetch(img.base64)
-          .then(async (r) => ({
-            key: img.id as string,
-            blob: await r.blob(),
-            filename: filenameFromBase64(img.base64, img.id),
-          }))
-          .catch((e) => { console.error("Inline decode failed for", img.id, e); return null; })
-      );
+      if (img.r2Key && !img.strapiUrl) {
+        inlineSlots.push({ img, batchIndex: uploadBatch.length });
+        uploadBatch.push({
+          r2Key: img.r2Key,
+          filename: `inline-${img.id}.${img.r2Key.split(".").pop() ?? "jpg"}`,
+        });
+      }
     }
 
-    const imagesToUpload = (await Promise.all(blobJobs)).filter(
-      (x): x is { key: string; blob: Blob; filename: string } => x !== null
-    );
+    const uploadResults = await bulkR2ToStrapi(uploadBatch);
 
-    // PHASE 1 — ONE POST (all images batched)
-    const uploadResultMap = await batchUploadImages(imagesToUpload, jwt);
+    let coverId: number | null = null;
+    let strapiCoverUrl: string | null = null;
+    if (coverR2Key) {
+      coverId = uploadResults[0].strapiId;
+      strapiCoverUrl = uploadResults[0].strapiUrl;
+    }
 
-    const coverUpload = uploadResultMap.get("cover") ?? null;
-    const coverId = coverUpload?.id ?? null;
-    const coverUrl = coverUpload?.url ?? null;
-
-    // STEP 3 — Build content with resolved inline URLs
-    let content = blog.content || "";
     const savedInlineImages: any[] = [];
+    let strapiContent = blog.content || "";
 
     for (const img of inlineImages) {
-      if (!img?.base64) { savedInlineImages.push(img); continue; }
-      const uploaded = uploadResultMap.get(img.id);
-      if (uploaded?.url) {
-        content = content.split(img.placeholder).join(`![image](${uploaded.url})`);
-        savedInlineImages.push({ ...img, strapiUrl: uploaded.url });
+      const slot = inlineSlots.find((s) => s.img === img);
+      const strapiUrl = slot
+        ? uploadResults[slot.batchIndex].strapiUrl
+        : (img.strapiUrl ?? null);
+      const strapiId = slot
+        ? uploadResults[slot.batchIndex].strapiId
+        : (img.strapiId ?? null);
+
+      if (img.placeholder && strapiUrl) {
+        // ROBUST REPLACEMENT: Escape the placeholder for safe Regex usage
+        const escapedPlaceholder = img.placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(escapedPlaceholder, 'g');
+        
+        strapiContent = strapiContent.replace(regex, `![image](${strapiUrl})`);
+
+        savedInlineImages.push({
+          ...img,
+          strapiUrl,
+          strapiId,
+          r2Key: img.r2Key ?? null,
+          r2Url: resolveR2Url(img.r2Url, img.r2Key),
+        });
       } else {
         savedInlineImages.push(img);
       }
     }
 
-    if (content.length > MAX_CONTENT_CHARS) content = content.slice(0, MAX_CONTENT_CHARS);
+    if (strapiContent.length > MAX_CONTENT_CHARS)
+      strapiContent = strapiContent.slice(0, MAX_CONTENT_CHARS);
 
-    // STEP 4 — Category IDs (sync, no API call)
     const categoryIds = resolveCategoryIds(blog.categories || []);
 
-    // PHASE 2 — ONE POST to create the blog in Strapi
     let strapiDocId: string | null = blog.strapiId ?? null;
 
     if (strapiDocId) {
@@ -243,13 +189,16 @@ export async function POST(req: NextRequest) {
     } else {
       const createRes = await fetch(`${STRAPI_URL}/api/blogs`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${jwt}`, "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Bearer ${jwt}`,
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           data: {
             title: blog.title,
             slug: blog.slug,
-            description: blog.description || content.slice(0, 160),
-            content,
+            description: blog.description || strapiContent.slice(0, 160),
+            content: strapiContent,
             category: categoryIds,
             cover: coverId,
             publishedAt: new Date().toISOString(),
@@ -264,7 +213,6 @@ export async function POST(req: NextRequest) {
         );
 
         if (isSlugConflict) {
-          console.warn(`⚠️ Slug conflict on "${blog.slug}" — recovering existing Strapi entry...`);
           const searchRes = await fetch(
             `${STRAPI_URL}/api/blogs?filters[slug][$eq]=${encodeURIComponent(blog.slug)}&fields[0]=id`,
             { headers: { Authorization: `Bearer ${jwt}` } }
@@ -273,10 +221,7 @@ export async function POST(req: NextRequest) {
             const searchData = await searchRes.json();
             const existing = searchData?.data?.[0];
             strapiDocId = existing?.documentId ?? String(existing?.id) ?? null;
-            console.warn(`✅ Recovered Strapi documentId: ${strapiDocId}`);
           }
-          if (!strapiDocId)
-            throw new Error(`Slug conflict on "${blog.slug}" but could not find existing entry.`);
         } else {
           throw new Error(`Blog create failed: ${JSON.stringify(errData)}`);
         }
@@ -286,14 +231,18 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // STEP 5 — Update MongoDB
     blog.status = "published";
     blog.strapiId = strapiDocId!;
     blog.publishedAt = new Date();
     blog.adminNotes = undefined;
     blog.rejectedAt = undefined;
     blog.inlineImages = savedInlineImages;
-    if (coverUrl) blog.strapiCoverUrl = coverUrl;
+    blog.strapiCoverUrl = strapiCoverUrl ?? undefined;
+    blog.strapiCoverId = coverId ?? undefined;
+    blog.r2CoverKey = coverR2Key ?? undefined;
+    blog.r2CoverUrl = resolveR2Url(coverR2Url, coverR2Key) ?? undefined;
+    blog.coverImageName = blog.coverImageName;
+
     await blog.save();
 
     return NextResponse.json({ success: true, strapiId: blog.strapiId });

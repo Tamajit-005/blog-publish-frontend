@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
     const blogs = await Blog.find({ "author.auth0Id": auth.user.auth0Id })
       .sort({ createdAt: -1 })
       .select(
-        "title slug description categories coverImage status adminNotes createdAt updatedAt deletionRequested deletionRequestedAt isDeletionRejected deletionRejectedNotes isEditPending isEditRejected pendingEdit"
+        "title slug description categories r2CoverKey r2CoverUrl coverImageName strapiCoverUrl status adminNotes createdAt updatedAt deletionRequested deletionRequestedAt isDeletionRejected deletionRejectedNotes isEditPending isEditRejected pendingEdit"
       )
       .lean();
 

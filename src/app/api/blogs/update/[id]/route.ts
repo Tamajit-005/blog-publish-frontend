@@ -3,19 +3,39 @@ import { checkUserAuth } from "@/lib/adminAuth";
 import dbConnect from "@/lib/mongoose";
 import Blog from "@/models/Blog";
 import { sendBlogEmail } from "@/lib/email";
+import { bulkDeleteFromR2 } from "@/lib/r2";
 
-function extractFilenameFromBase64(base64?: string): string | undefined {
-  if (!base64 || !base64.startsWith("data:image/")) return undefined;
-  const commaIndex = base64.indexOf(",");
-  if (commaIndex === -1) return undefined;
-  const header = base64.slice(0, Math.min(commaIndex, 512));
-  const nameIndex = header.indexOf("name=");
-  if (nameIndex !== -1) {
-    const start = nameIndex + 5;
-    const end = header.indexOf(";", start);
-    if (end !== -1) return decodeURIComponent(header.slice(start, end));
+function collectR2Keys(images: any[] = []): string[] {
+  return Array.from(
+    new Set(
+      images
+        .map((img: any) => img?.r2Key)
+        .filter((v: any): v is string => typeof v === "string" && v.length > 0)
+    )
+  );
+}
+
+function collectRemovedR2Keys(
+  oldImages: any[] = [],
+  newImages: any[] = [],
+  oldCoverKey?: string | null,
+  newCoverKey?: string | null
+): string[] {
+  const removed: string[] = [];
+
+  // Cover diff
+  if (oldCoverKey && oldCoverKey !== newCoverKey) {
+    removed.push(oldCoverKey);
   }
-  return "cover.jpg";
+
+  // Inline diff
+  const oldKeys = new Set(collectR2Keys(oldImages));
+  const newKeys = new Set(collectR2Keys(newImages));
+  for (const key of oldKeys) {
+    if (!newKeys.has(key)) removed.push(key);
+  }
+
+  return [...new Set(removed)];
 }
 
 export async function PUT(
@@ -30,12 +50,24 @@ export async function PUT(
 
     const { id } = await params;
     const body = await req.json();
-    const { title, slug, content, description, coverImage, categories, inlineImages } = body;
+    const {
+      title,
+      slug,
+      content,
+      description,
+      r2CoverKey,
+      r2CoverUrl,
+      coverImageName,
+      strapiCoverUrl,
+      categories,
+      inlineImages,
+    } = body;
 
     await dbConnect();
 
     const blog = await Blog.findById(id);
-    if (!blog) return NextResponse.json({ error: "Blog not found" }, { status: 404 });
+    if (!blog)
+      return NextResponse.json({ error: "Blog not found" }, { status: 404 });
 
     if (blog.author.auth0Id !== auth.user.auth0Id) {
       return NextResponse.json({ error: "Not your blog" }, { status: 403 });
@@ -43,19 +75,19 @@ export async function PUT(
 
     const normalizedSlug = slug.toLowerCase().trim();
     const slugExists = await Blog.findOne({ slug: normalizedSlug, _id: { $ne: id } });
-    if (slugExists) return NextResponse.json({ error: "Slug already taken" }, { status: 400 });
+    if (slugExists)
+      return NextResponse.json({ error: "Slug already taken" }, { status: 400 });
 
     if (blog.status === "published" || blog.status === "approved") {
-      // For pending edit: store coverImage as-is so approve-edit can interpret it
-      // "" = user removed cover, base64 = new upload, URL = unchanged existing
-      let pendingCoverImageName: string | undefined;
-      if (coverImage === "") {
-        pendingCoverImageName = undefined; // removing cover, no name needed
-      } else if (coverImage?.startsWith("data:")) {
-        pendingCoverImageName = extractFilenameFromBase64(coverImage) || "cover.jpg";
-      } else {
-        pendingCoverImageName = blog.coverImageName; // existing URL, keep existing name
-      }
+      // Compare against existing pendingEdit if present, otherwise against live blog
+      const previousSource = blog.pendingEdit ?? blog;
+
+      const orphanedR2Keys = collectRemovedR2Keys(
+        previousSource.inlineImages ?? [],
+        Array.isArray(inlineImages) ? inlineImages : [],
+        previousSource.r2CoverKey,
+        r2CoverKey ?? null
+      );
 
       blog.isEditPending = true;
       blog.pendingEdit = {
@@ -63,16 +95,26 @@ export async function PUT(
         slug: normalizedSlug,
         content: content.trim(),
         description: description.trim(),
-        coverImage: coverImage,  // store as-is for approve-edit logic
-        coverImageName: pendingCoverImageName,
+        r2CoverKey: r2CoverKey ?? null,
+        r2CoverUrl: r2CoverUrl ?? null,
+        coverImageName: coverImageName || undefined,
+        strapiCoverUrl: strapiCoverUrl ?? null,
         categories,
-        inlineImages: Array.isArray(inlineImages) ? inlineImages : (blog.inlineImages ?? []),
+        inlineImages: Array.isArray(inlineImages) ? inlineImages : blog.inlineImages ?? [],
       };
       blog.isEditRejected = false;
       blog.adminNotes = undefined;
+
       await blog.save();
 
-      // Send email notification about the edit submission
+      // Fire-and-forget cleanup of replaced/removed pending assets
+      if (orphanedR2Keys.length > 0) {
+        bulkDeleteFromR2(orphanedR2Keys).catch((err) =>
+          console.error("R2 cleanup failed on edit submit:", err)
+        );
+        console.log(`🗑️ Queued ${orphanedR2Keys.length} orphaned R2 key(s):`, orphanedR2Keys);
+      }
+
       await sendBlogEmail({
         type: "edit_submitted",
         blogTitle: blog.title,
@@ -85,26 +127,34 @@ export async function PUT(
 
       return NextResponse.json({ message: "Edit submitted for admin review", isEditPending: true });
     } else {
-      // Directly update if not published/approved, no pending state needed
+      // Non-published: diff old live blog keys vs new keys and delete orphans
+      const orphanedR2Keys = collectRemovedR2Keys(
+        blog.inlineImages ?? [],
+        Array.isArray(inlineImages) ? inlineImages : [],
+        blog.r2CoverKey,
+        r2CoverKey ?? null
+      );
+
       blog.title = title.trim();
       blog.slug = normalizedSlug;
       blog.content = content.trim();
       blog.description = description.trim();
       blog.categories = categories;
-      blog.inlineImages = Array.isArray(inlineImages) ? inlineImages : (blog.inlineImages ?? []);
-
-      if (coverImage === "") {
-        // User explicitly removed the cover image
-        blog.coverImage = undefined;
-        blog.coverImageName = undefined;
-      } else if (coverImage) {
-        blog.coverImage = coverImage.trim();
-        blog.coverImageName = extractFilenameFromBase64(coverImage) || blog.coverImageName;
-      }
-      // if coverImage is undefined (shouldn't happen), keep existing
+      blog.inlineImages = Array.isArray(inlineImages) ? inlineImages : blog.inlineImages ?? [];
+      blog.r2CoverKey = r2CoverKey ?? undefined;
+      blog.r2CoverUrl = r2CoverUrl ?? undefined;
+      blog.coverImageName = coverImageName || undefined;
 
       if (blog.status === "rejected") blog.status = "pending";
+
       await blog.save();
+
+      if (orphanedR2Keys.length > 0) {
+        bulkDeleteFromR2(orphanedR2Keys).catch((err) =>
+          console.error("R2 cleanup failed on direct edit:", err)
+        );
+        console.log(`🗑️ Queued ${orphanedR2Keys.length} orphaned R2 key(s):`, orphanedR2Keys);
+      }
 
       return NextResponse.json({ message: "Blog updated successfully", isEditPending: false });
     }

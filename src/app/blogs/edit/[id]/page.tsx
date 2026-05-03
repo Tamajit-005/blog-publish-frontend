@@ -5,6 +5,17 @@ import { useRouter, useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { FIXED_CATEGORIES } from "@/lib/categories";
 
+const R2_URL = process.env.NEXT_PUBLIC_R2_PUBLIC_URL ?? "";
+
+function resolveR2Url(
+  r2Url?: string | null,
+  r2Key?: string | null,
+): string | null {
+  if (r2Url) return r2Url;
+  if (r2Key && R2_URL) return `${R2_URL}/${r2Key}`;
+  return null;
+}
+
 function insertTextAtCursor(
   el: HTMLTextAreaElement,
   text: string,
@@ -40,7 +51,6 @@ function ValidationWarning({ message }: { message: string }) {
   );
 }
 
-// Shows remaining characters; warns when near or at the limit
 function CharCount({ current, max }: { current: number; max: number }) {
   const remaining = max - current;
   if (current === 0) return null;
@@ -113,9 +123,38 @@ interface Category {
 
 interface InlineImage {
   id: string;
-  base64: string;
   placeholder: string;
+  r2Key?: string;
+  r2Url?: string;
   strapiUrl?: string;
+  strapiId?: number;
+}
+
+interface Blog {
+  _id: string;
+  title: string;
+  slug: string;
+  description?: string;
+  r2CoverKey?: string | null;
+  r2CoverUrl?: string | null;
+  coverImageName?: string;
+  strapiCoverUrl?: string | null;
+  content: string;
+  categories: string[];
+  inlineImages?: InlineImage[];
+  isEditPending?: boolean;
+  pendingEdit?: {
+    title: string;
+    slug: string;
+    description?: string;
+    content: string;
+    r2CoverKey?: string | null;
+    r2CoverUrl?: string | null;
+    coverImageName?: string;
+    strapiCoverUrl?: string | null;
+    categories: string[];
+    inlineImages?: InlineImage[];
+  };
 }
 
 export default function EditBlogPage() {
@@ -128,8 +167,16 @@ export default function EditBlogPage() {
   const [description, setDescription] = useState("");
   const [content, setContent] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [coverImage, setCoverImage] = useState("");
+
+  // Track all 3 URLs precisely so they don't get wiped on submit
+  const [r2CoverKey, setR2CoverKey] = useState<string | null>(null);
+  const [r2CoverUrl, setR2CoverUrl] = useState<string | null>(null);
+  const [strapiCoverUrl, setStrapiCoverUrl] = useState<string | null>(null);
+
+  const [coverImageName, setCoverImageName] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [coverUploading, setCoverUploading] = useState(false);
+  const [inlineUploading, setInlineUploading] = useState(false);
 
   const [inlineImages, setInlineImages] = useState<InlineImage[]>([]);
   const imageCounterRef = useRef(0);
@@ -141,7 +188,6 @@ export default function EditBlogPage() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  // ── Image-specific validation warnings ──────────────────────────
   const [coverImageError, setCoverImageError] = useState<string | null>(null);
   const [inlineImageError, setInlineImageError] = useState<string | null>(null);
 
@@ -158,6 +204,7 @@ export default function EditBlogPage() {
   const titleRef = useRef<HTMLDivElement>(null);
   const descriptionRef = useRef<HTMLDivElement>(null);
   const categoryRef = useRef<HTMLDivElement>(null);
+  const slugRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -183,25 +230,34 @@ export default function EditBlogPage() {
             setDescription(source.description || "");
             setContent(source.content || "");
             setSelectedCategories(source.categories || []);
-            setCoverImage(source.coverImage || "");
-            setImagePreview(source.coverImage || null);
             setInlineImages(source.inlineImages || []);
             imageCounterRef.current = source.inlineImages?.length || 0;
+
+            const r2Url =
+              resolveR2Url(source.r2CoverUrl, source.r2CoverKey) ||
+              resolveR2Url(data.blog.r2CoverUrl, data.blog.r2CoverKey);
+
+            const initialPreview =
+              r2Url ||
+              source.strapiCoverUrl ||
+              data.blog.strapiCoverUrl ||
+              null;
+
+            // Populate all state variables to preserve them on next submit
+            setR2CoverKey(source.r2CoverKey || null);
+            setR2CoverUrl(source.r2CoverUrl || data.blog.r2CoverUrl || null);
+            setStrapiCoverUrl(
+              source.strapiCoverUrl || data.blog.strapiCoverUrl || null,
+            );
+            setCoverImageName(source.coverImageName || null);
+            setImagePreview(initialPreview);
           }
         })
         .finally(() => setLoading(false));
     }
   }, [id, router]);
 
-  function injectFilenameToDataUrl(dataUrl: string, filename: string) {
-    const safe = encodeURIComponent(filename);
-    return dataUrl.replace(
-      /^data:(image\/[^;]+);base64,/,
-      `data:$1;name=${safe};base64,`,
-    );
-  }
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -209,28 +265,60 @@ export default function EditBlogPage() {
       setCoverImageError("Please select a valid image file.");
       return;
     }
-
-    const maxSize = 2 * 1024 * 1024;
-    if (file.size > maxSize) {
+    if (file.size > 2 * 1024 * 1024) {
       setCoverImageError("Image size must be less than 2MB.");
       return;
     }
 
-    // Clear any previous error on successful pick
     setCoverImageError(null);
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const rawBase64 = reader.result as string;
-      const withName = injectFilenameToDataUrl(rawBase64, file.name);
-      setCoverImage(withName);
-      setImagePreview(withName);
-    };
-    reader.onerror = () => setCoverImageError("Failed to read image file.");
-    reader.readAsDataURL(file);
+    // Delete old R2 cover before replacing
+    if (r2CoverKey) {
+      await fetch("/api/upload", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ r2Key: r2CoverKey }),
+      }).catch((err) => console.warn("Old cover cleanup failed:", err));
+
+      setR2CoverKey(null);
+      setR2CoverUrl(null);
+      setCoverImageName(null);
+    }
+
+    // Local preview immediately
+    const localPreview = URL.createObjectURL(file);
+    setImagePreview(localPreview);
+
+    setCoverUploading(true);
+    e.target.value = "";
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("folder", "covers");
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+
+      // Set new R2 details and clear Strapi since we're replacing the cover
+      setR2CoverKey(data.r2Key);
+      setR2CoverUrl(`${R2_URL}/${data.r2Key}`);
+      setStrapiCoverUrl(null);
+      setCoverImageName(file.name);
+    } catch (err: any) {
+      setCoverImageError(err.message || "Upload failed. Please try again.");
+      setImagePreview(null);
+    } finally {
+      setCoverUploading(false);
+    }
   };
 
-  const handleInlineImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInlineImageUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -245,43 +333,74 @@ export default function EditBlogPage() {
       return;
     }
 
-    // Clear any previous error on successful pick
     setInlineImageError(null);
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const rawBase64 = reader.result as string;
-      const base64WithName = injectFilenameToDataUrl(rawBase64, file.name);
+    const el = textareaRef.current;
+    if (!el) return;
 
-      const el = textareaRef.current;
-      if (!el) return;
+    imageCounterRef.current += 1;
+    const imageId = `img_${imageCounterRef.current}`;
+    const placeholder = `![image-${imageCounterRef.current}]`;
 
-      imageCounterRef.current += 1;
-      const imageId = `img_${imageCounterRef.current}`;
-      const placeholder = `![image-${imageCounterRef.current}]`;
+    // Insert placeholder immediately (optimistic)
+    insertTextAtCursor(el, placeholder, 0);
+    setContent(el.value);
+
+    setInlineUploading(true);
+    e.target.value = "";
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("folder", "inline");
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error || "Upload failed");
 
       const newImage: InlineImage = {
         id: imageId,
-        base64: base64WithName,
-        placeholder: placeholder,
+        placeholder,
+        r2Key: data.r2Key,
       };
       setInlineImages((prev) => [...prev, newImage]);
-
-      insertTextAtCursor(el, placeholder, 0);
-      setContent(el.value);
-    };
-    reader.onerror = () => setInlineImageError("Failed to read image file.");
-    reader.readAsDataURL(file);
-
-    e.target.value = "";
+    } catch (err: any) {
+      // Remove placeholder on failure
+      setContent((prev) => prev.replace(placeholder, ""));
+      if (textareaRef.current) {
+        textareaRef.current.value = textareaRef.current.value.replace(
+          placeholder,
+          "",
+        );
+      }
+      setInlineImageError(
+        err.message || "Image upload failed. Please try again.",
+      );
+    } finally {
+      setInlineUploading(false);
+    }
   };
 
   const openInlineImagePicker = () => inlineImageInputRef.current?.click();
 
-  const clearImage = () => {
-    setCoverImage("");
+  const clearImage = async () => {
+    if (r2CoverKey) {
+      await fetch("/api/upload", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ r2Key: r2CoverKey }),
+      }).catch((err) => console.warn("Cover cleanup failed:", err));
+    }
     setImagePreview(null);
     setCoverImageError(null);
+    setR2CoverKey(null);
+    setR2CoverUrl(null);
+    setStrapiCoverUrl(null);
+    setCoverImageName(null);
   };
 
   function getTitleError(): string | null {
@@ -295,6 +414,11 @@ export default function EditBlogPage() {
     if (description.trim().length === 0) return "Please fill in this field.";
     if (description.trim().length < 10)
       return `Please lengthen this text to 10 characters or more (you are currently using ${description.trim().length} character${description.trim().length !== 1 ? "s" : ""}).`;
+    return null;
+  }
+
+  function getSlugError(): string | null {
+    if (slug.trim().length === 0) return "Please fill in this field.";
     return null;
   }
 
@@ -323,9 +447,11 @@ export default function EditBlogPage() {
         ? descriptionRef
         : getCategoryError()
           ? categoryRef
-          : getContentError()
-            ? contentRef
-            : null;
+          : getSlugError()
+            ? slugRef
+            : getContentError()
+              ? contentRef
+              : null;
 
     if (firstErrorRef?.current) {
       setTimeout(() => {
@@ -340,6 +466,7 @@ export default function EditBlogPage() {
       getTitleError() ||
       getDescriptionError() ||
       getCategoryError() ||
+      getSlugError() ||
       getContentError() ||
       !slug.trim()
     )
@@ -361,7 +488,10 @@ export default function EditBlogPage() {
           slug: slug.trim(),
           content: content.trim(),
           description: description.trim(),
-          coverImage: coverImage,
+          r2CoverKey: r2CoverKey ?? null,
+          r2CoverUrl: r2CoverUrl ?? null,
+          strapiCoverUrl: strapiCoverUrl ?? null,
+          coverImageName: coverImageName || undefined,
           inlineImages: activeInlineImages,
           categories: selectedCategories,
         }),
@@ -562,7 +692,6 @@ export default function EditBlogPage() {
                 maxLength={200}
                 className="w-full p-3 rounded-md bg-gray-800 border border-gray-700 focus:border-teal-400 outline-none"
               />
-              {/* Live character counter — warns at 180+, red at 200 */}
               <CharCount current={title.length} max={200} />
               <AnimatePresence>
                 {showErrors && getTitleError() && (
@@ -586,7 +715,6 @@ export default function EditBlogPage() {
                 maxLength={300}
                 className="w-full p-3 rounded-md bg-gray-800 border border-gray-700 focus:border-teal-400 outline-none"
               />
-              {/* Live character counter — warns at 280+, red at 300 */}
               <CharCount current={description.length} max={300} />
               <AnimatePresence>
                 {showErrors && getDescriptionError() && (
@@ -700,7 +828,7 @@ export default function EditBlogPage() {
             </div>
 
             {/* Slug */}
-            <div>
+            <div ref={slugRef}>
               <label className="block text-sm text-gray-400 mb-2">
                 Slug <span className="text-red-500">*</span>
               </label>
@@ -716,6 +844,11 @@ export default function EditBlogPage() {
                 Used in URL: yoursite.com/blog/
                 <strong>{slug || "slug"}</strong>
               </p>
+              <AnimatePresence>
+                {showErrors && getSlugError() && (
+                  <ValidationWarning key="slug-err" message={getSlugError()!} />
+                )}
+              </AnimatePresence>
             </div>
 
             {/* Cover Image Upload */}
@@ -724,7 +857,13 @@ export default function EditBlogPage() {
                 Cover Image (Optional)
               </label>
 
-              {!imagePreview ? (
+              {coverUploading ? (
+                <div className="border-2 border-dashed border-teal-500 rounded-md p-6 text-center">
+                  <div className="text-teal-400 animate-pulse text-sm">
+                    Uploading image...
+                  </div>
+                </div>
+              ) : !imagePreview ? (
                 <div className="border-2 border-dashed border-gray-700 rounded-md p-6 text-center hover:border-teal-500 transition">
                   <input
                     type="file"
@@ -788,7 +927,6 @@ export default function EditBlogPage() {
                 </div>
               )}
 
-              {/* ── Cover image warning ── */}
               <AnimatePresence>
                 {coverImageError && (
                   <ValidationWarning
@@ -821,6 +959,12 @@ export default function EditBlogPage() {
                     ? "s"
                     : ""}{" "}
                   added
+                </div>
+              )}
+
+              {inlineUploading && (
+                <div className="mb-2 text-xs text-teal-400 animate-pulse">
+                  ⏳ Uploading inline image...
                 </div>
               )}
 
@@ -930,7 +1074,8 @@ export default function EditBlogPage() {
                       type="button"
                       onClick={openInlineImagePicker}
                       title="Insert image"
-                      className="px-3 py-1.5 rounded hover:bg-slate-700 flex items-center gap-1 shrink-0"
+                      disabled={inlineUploading}
+                      className="px-3 py-1.5 rounded hover:bg-slate-700 flex items-center gap-1 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <svg
                         className="w-4 h-4"
@@ -945,7 +1090,7 @@ export default function EditBlogPage() {
                           d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
                         />
                       </svg>
-                      Image
+                      {inlineUploading ? "Uploading..." : "Image"}
                     </button>
 
                     <input
@@ -976,7 +1121,6 @@ export default function EditBlogPage() {
                 />
               </div>
 
-              {/* ── Inline image warning ── */}
               <AnimatePresence>
                 {inlineImageError && (
                   <ValidationWarning
@@ -999,10 +1143,14 @@ export default function EditBlogPage() {
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || coverUploading || inlineUploading}
               className="bg-teal-500 hover:bg-teal-400 text-gray-900 font-semibold py-3 rounded-md transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {submitting ? "Saving..." : "Save Changes"}
+              {submitting
+                ? "Saving..."
+                : coverUploading || inlineUploading
+                  ? "Uploading images..."
+                  : "Save Changes"}
             </button>
           </form>
         </div>
