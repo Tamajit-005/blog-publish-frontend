@@ -108,11 +108,11 @@ export default function HomePage() {
 
                 {/* VISIT POST PALETTE */}
                 <a
-                  href="https://strapi-rho-five.vercel.app/"
+                  href="https://postpalette.online/"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="px-6 py-3 border border-gray-600 text-gray-300
-                             rounded-lg hover:bg-gray-700 hover:text-white
+                             rounded-lg hover:bg-emerald-400 hover:border-emerald-400 hover:text-slate-950
                              font-semibold transition-all duration-200"
                 >
                   Visit POST PALETTE
