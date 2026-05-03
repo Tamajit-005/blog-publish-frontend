@@ -81,6 +81,14 @@ playwright-report/
 cypress/
 cypress.config.ts
 
+
+# ============================================
+Claude file types that are not relevant to the project
+# ============================================
+CLAUDE.md
+DESIGN.md
+
+
 # ============================================
 # ✅ END
 # ============================================
