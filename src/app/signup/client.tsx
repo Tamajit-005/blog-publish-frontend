@@ -3,8 +3,18 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { motion } from "framer-motion";
-import { Eye, EyeOff, Check, X } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Eye,
+  EyeOff,
+  Check,
+  X,
+  UserPlus,
+  Mail,
+  User,
+  Lock,
+  ShieldCheck,
+} from "lucide-react";
 
 export default function SignupPage() {
   const [formData, setFormData] = useState({
@@ -64,326 +74,324 @@ export default function SignupPage() {
         window.location.href = `/login?returnTo=${encodeURIComponent(returnTo)}`;
       }, 2000);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || "Signup failed");
       setLoading(false);
     }
   };
 
+  /* ── SUCCESS STATE ── */
   if (success) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+      <main className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-[#04070c] p-4">
+        <div className="absolute inset-0">
+          <div
+            className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+            style={{ backgroundImage: "url('/images/hero-bg.jpg')" }}
+          />
+          <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(3,6,10,0.65),rgba(3,6,10,0.85))]" />
+        </div>
+
         <motion.div
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ duration: 0.4 }}
-          className="max-w-md w-full bg-slate-900 rounded-lg p-8 text-center border border-teal-500/20 shadow-2xl"
+          initial={{ scale: 0.92, opacity: 0, y: 20 }}
+          animate={{ scale: 1, opacity: 1, y: 0 }}
+          className="relative z-10 w-full max-w-[480px] rounded-[32px] border border-white/8 bg-[rgba(4,10,18,0.9)] p-10 text-center shadow-[0_0_60px_rgba(0,0,0,0.5)] backdrop-blur-2xl"
         >
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
-            transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-            className="text-7xl mb-4"
+            transition={{ type: "spring", stiffness: 220 }}
+            className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full border border-teal-400/25 bg-teal-400/10 shadow-[0_0_32px_rgba(45,212,191,0.22)]"
           >
-            ✅
+            <Check size={38} className="text-teal-300" strokeWidth={2.5} />
           </motion.div>
-          <motion.h1
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="text-3xl font-bold text-teal-400 mb-3"
-          >
+          <h1 className="text-[2.1rem] font-black tracking-tight text-teal-400">
             Account Created!
-          </motion.h1>
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.4 }}
-            className="text-gray-400 mb-2"
-          >
-            Welcome to Palette Publisher! 🎉
-          </motion.p>
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5 }}
-            className="text-gray-500 text-sm mb-6"
-          >
-            Redirecting to login...
-          </motion.p>
-          <div className="animate-pulse bg-teal-500/10 rounded-lg p-4 border border-teal-500/30">
-            <p className="text-teal-400 text-sm font-medium">
-              Get ready to publish amazing content ✨
-            </p>
-          </div>
+          </h1>
+          <p className="mt-3 text-white/80">Welcome to Palette Publisher! 🎉</p>
+          <p className="mt-1 text-white/45 text-sm">Redirecting to login...</p>
         </motion.div>
-      </div>
+      </main>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-      <div className="max-w-md w-full">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="text-center mb-8"
-        >
-          <h1 className="text-4xl md:text-5xl font-bold text-teal-400 mb-3">
-            Create Account
-          </h1>
-          <p className="text-gray-400">
-            Join Palette Publisher and start creating
-          </p>
-        </motion.div>
+    <div className="relative min-h-screen overflow-hidden bg-[#04070c] text-white">
+      {/* BACKGROUND (Identical to Login) */}
+      <div className="absolute inset-0">
+        <div
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+          style={{ backgroundImage: "url('/images/hero-bg.jpg')" }}
+        />
+        <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(3,6,10,0.55),rgba(3,6,10,0.78))]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(45,212,191,0.08),transparent_26%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(4,7,12,0.18),rgba(4,7,12,0.04),rgba(4,7,12,0.18))]" />
+      </div>
 
-        {/* Form Card */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.5 }}
-          className="bg-slate-900 rounded-lg p-8 shadow-2xl border border-slate-800"
-        >
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="block text-gray-300 mb-2 font-medium text-sm">
-                Email Address
-              </label>
-              <input
-                type="email"
-                value={formData.email}
-                onChange={(e) =>
-                  setFormData({ ...formData, email: e.target.value })
-                }
-                required
-                disabled={loading}
-                className="w-full p-3 rounded-md bg-slate-800 text-gray-100 border border-slate-700 focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 focus:outline-none transition disabled:opacity-50 disabled:cursor-not-allowed"
-                placeholder="your@email.com"
-              />
+      <div className="relative z-10 flex min-h-screen flex-col items-center justify-center px-4 pb-8 pt-24 sm:px-6 sm:pb-10 sm:pt-28">
+        <div className="w-full max-w-[420px] sm:max-w-[480px] lg:max-w-[520px]">
+          <motion.div
+            initial={{ opacity: 0, y: 22, scale: 0.985 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+            className="rounded-[24px] border border-white/8 bg-[rgba(4,10,18,0.86)] px-5 py-7 shadow-[0_12px_52px_rgba(0,0,0,0.38),0_0_28px_rgba(45,212,191,0.06)] backdrop-blur-2xl sm:rounded-[28px] sm:px-8 sm:py-9"
+          >
+            {/* USER ICON (Matches Lock Icon style) */}
+            <div className="mb-6 flex justify-center sm:mb-7">
+              <div className="relative flex h-20 w-20 items-center justify-center rounded-full border border-teal-400/22 bg-[radial-gradient(circle,rgba(45,212,191,0.16),rgba(7,14,22,0.70)_58%)] shadow-[0_0_28px_rgba(45,212,191,0.16),inset_0_0_16px_rgba(45,212,191,0.08)] sm:h-24 sm:w-24">
+                <div className="pointer-events-none absolute inset-0 rounded-full border border-teal-300/12" />
+                <UserPlus
+                  className="h-9 w-9 text-teal-300 drop-shadow-[0_0_14px_rgba(45,212,191,0.38)] sm:h-10 sm:w-10"
+                  strokeWidth={1.8}
+                />
+              </div>
             </div>
 
-            <div>
-              <label className="block text-gray-300 mb-2 font-medium text-sm">
-                Username
-              </label>
-              <input
-                type="text"
-                value={formData.username}
-                onChange={(e) =>
-                  setFormData({ ...formData, username: e.target.value })
-                }
-                required
-                minLength={3}
-                maxLength={30}
-                pattern="[a-zA-Z0-9_]+"
-                disabled={loading}
-                className="w-full p-3 rounded-md bg-slate-800 text-gray-100 border border-slate-700 focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 focus:outline-none transition font-mono disabled:opacity-50 disabled:cursor-not-allowed"
-                placeholder="Username"
-              />
-              <p className="text-xs text-gray-500 mt-2 flex items-center gap-2">
-                <span className="inline-block w-1.5 h-1.5 bg-teal-400 rounded-full"></span>
-                Case-sensitive • Letters, numbers, underscore only
+            {/* HEADING (Matches Login Heading) */}
+            <div className="mb-7 text-center sm:mb-8">
+              <h1 className="text-[2.1rem] font-bold tracking-tight text-white sm:text-[2.6rem]">
+                Create{" "}
+                <span className="text-teal-400 drop-shadow-[0_0_14px_rgba(45,212,191,0.24)]">
+                  Account
+                </span>
+              </h1>
+              <p className="mt-2 text-[1rem] text-white/58 sm:mt-3 sm:text-[1.08rem]">
+                Join Palette Publisher and start creating
               </p>
             </div>
 
-            <div>
-              <label className="block text-gray-300 mb-2 font-medium text-sm">
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={formData.password}
-                  onChange={(e) =>
-                    setFormData({ ...formData, password: e.target.value })
-                  }
-                  onFocus={() => setPasswordFocused(true)}
-                  onBlur={() => setPasswordFocused(false)}
-                  required
-                  minLength={8}
-                  disabled={loading}
-                  className="w-full p-3 pr-12 rounded-md bg-slate-800 text-gray-100 border border-slate-700 focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 focus:outline-none transition disabled:opacity-50 disabled:cursor-not-allowed"
-                  placeholder="Minimum 8 characters"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300 transition"
-                  tabIndex={-1}
-                >
-                  {showPassword ? (
-                    <EyeOff className="w-5 h-5" />
-                  ) : (
-                    <Eye className="w-5 h-5" />
-                  )}
-                </button>
+            {/* FORM */}
+            <motion.form
+              onSubmit={handleSubmit}
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1, duration: 0.4 }}
+              className="space-y-4"
+            >
+              {/* EMAIL */}
+              <div>
+                <label className="mb-2 block text-[0.97rem] font-semibold text-white/88 sm:text-[1.02rem]">
+                  Email Address
+                </label>
+                <div className="relative">
+                  <Mail className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-white/40 sm:h-5 sm:w-5" />
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) =>
+                      setFormData({ ...formData, email: e.target.value })
+                    }
+                    required
+                    disabled={loading}
+                    placeholder="you@example.com"
+                    className="h-[54px] w-full rounded-[14px] border border-white/8 bg-[#0a101a]/90 pl-11 pr-4 text-[1rem] text-white placeholder:text-white/32 outline-none transition focus:border-teal-400/32 focus:ring-2 focus:ring-teal-400/12 disabled:cursor-not-allowed disabled:opacity-50 sm:h-[60px] sm:pl-12"
+                  />
+                </div>
               </div>
 
-              {(formData.password.length > 0 || passwordFocused) && (
+              {/* USERNAME */}
+              <div>
+                <label className="mb-2 block text-[0.97rem] font-semibold text-white/88 sm:text-[1.02rem]">
+                  Username
+                </label>
+                <div className="relative">
+                  <User className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-white/40 sm:h-5 sm:w-5" />
+                  <input
+                    type="text"
+                    value={formData.username}
+                    onChange={(e) =>
+                      setFormData({ ...formData, username: e.target.value })
+                    }
+                    required
+                    minLength={3}
+                    maxLength={30}
+                    pattern="[a-zA-Z0-9_]+"
+                    disabled={loading}
+                    placeholder="Username"
+                    className="h-[54px] w-full rounded-[14px] border border-white/8 bg-[#0a101a]/90 pl-11 pr-4 text-[1rem] text-white placeholder:text-white/32 outline-none transition focus:border-teal-400/32 focus:ring-2 focus:ring-teal-400/12 disabled:cursor-not-allowed disabled:opacity-50 sm:h-[60px] sm:pl-12"
+                  />
+                </div>
+              </div>
+
+              {/* PASSWORD */}
+              <div>
+                <label className="mb-2 block text-[0.97rem] font-semibold text-white/88 sm:text-[1.02rem]">
+                  Password
+                </label>
+                <div className="relative">
+                  <Lock className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-white/40 sm:h-5 sm:w-5" />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={formData.password}
+                    onChange={(e) =>
+                      setFormData({ ...formData, password: e.target.value })
+                    }
+                    onFocus={() => setPasswordFocused(true)}
+                    onBlur={() => setPasswordFocused(false)}
+                    required
+                    disabled={loading}
+                    placeholder="Minimum 8 characters"
+                    className="h-[54px] w-full rounded-[14px] border border-white/8 bg-[#0a101a]/90 pl-11 pr-12 text-[1rem] text-white placeholder:text-white/32 outline-none transition focus:border-teal-400/32 focus:ring-2 focus:ring-teal-400/12 disabled:cursor-not-allowed disabled:opacity-50 sm:h-[60px] sm:pl-12"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 transition hover:text-white/75"
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
+                </div>
+
+                {/* PASSWORD REQUIREMENTS BLOCK */}
+                <AnimatePresence>
+                  {(formData.password.length > 0 || passwordFocused) && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      // Use a standard ease for smoother height transitions
+                      transition={{ duration: 0.3, ease: "easeInOut" }}
+                      className="mt-3 overflow-hidden rounded-2xl border border-white/6 bg-[#0c1220] p-4"
+                    >
+                      {/* Changed to a vertical flex column for all devices */}
+                      <div className="flex flex-col gap-2.5">
+                        {[
+                          {
+                            key: "length",
+                            label: "At least 8 characters in length",
+                          },
+                          {
+                            key: "lowercase",
+                            label: "Lower case letters (a-z)",
+                          },
+                          {
+                            key: "uppercase",
+                            label: "Upper case letters (A-Z)",
+                          },
+                          { key: "number", label: "Numbers (0-9)" },
+                          {
+                            key: "special",
+                            label: "Special characters (!@#$%^&*)",
+                          },
+                        ].map(({ key, label }) => {
+                          const passed =
+                            passwordChecks[key as keyof typeof passwordChecks];
+                          return (
+                            <motion.div
+                              key={key}
+                              layout // Helps prevent layout snapping during expansion
+                              className="flex items-center gap-3"
+                            >
+                              <div className="flex h-4 w-4 shrink-0 items-center justify-center">
+                                {passed ? (
+                                  <Check
+                                    size={14}
+                                    className="text-teal-400"
+                                    strokeWidth={3}
+                                  />
+                                ) : (
+                                  <X
+                                    size={14}
+                                    className="text-white/20"
+                                    strokeWidth={3}
+                                  />
+                                )}
+                              </div>
+                              <span
+                                className={`text-[0.82rem] transition-colors duration-300 ${
+                                  passed ? "text-teal-300" : "text-white/40"
+                                }`}
+                              >
+                                {label}
+                              </span>
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* ERROR */}
+              {error && (
                 <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="mt-3 space-y-2 bg-slate-800 rounded-md p-4 border border-slate-700"
+                  initial={{ opacity: 0, scale: 0.97 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="flex items-start gap-3 rounded-[14px] border border-red-500/30 bg-red-500/[0.08] p-4 text-[0.95rem] text-red-300"
                 >
-                  <p className="text-xs text-gray-400 font-medium mb-3">
-                    Password must contain:
-                  </p>
-
-                  <div className="flex items-center gap-2 text-sm">
-                    {passwordChecks.length ? (
-                      <Check className="w-4 h-4 text-teal-400 flex-shrink-0" />
-                    ) : (
-                      <X className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                    )}
-                    <span
-                      className={
-                        passwordChecks.length
-                          ? "text-teal-400"
-                          : "text-gray-400"
-                      }
-                    >
-                      At least 8 characters in length
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-sm">
-                    {passwordChecks.lowercase ? (
-                      <Check className="w-4 h-4 text-teal-400 flex-shrink-0" />
-                    ) : (
-                      <X className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                    )}
-                    <span
-                      className={
-                        passwordChecks.lowercase
-                          ? "text-teal-400"
-                          : "text-gray-400"
-                      }
-                    >
-                      Lower case letters (a-z)
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-sm">
-                    {passwordChecks.uppercase ? (
-                      <Check className="w-4 h-4 text-teal-400 flex-shrink-0" />
-                    ) : (
-                      <X className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                    )}
-                    <span
-                      className={
-                        passwordChecks.uppercase
-                          ? "text-teal-400"
-                          : "text-gray-400"
-                      }
-                    >
-                      Upper case letters (A-Z)
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-sm">
-                    {passwordChecks.number ? (
-                      <Check className="w-4 h-4 text-teal-400 flex-shrink-0" />
-                    ) : (
-                      <X className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                    )}
-                    <span
-                      className={
-                        passwordChecks.number
-                          ? "text-teal-400"
-                          : "text-gray-400"
-                      }
-                    >
-                      Numbers (0-9)
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-sm">
-                    {passwordChecks.special ? (
-                      <Check className="w-4 h-4 text-teal-400 flex-shrink-0" />
-                    ) : (
-                      <X className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                    )}
-                    <span
-                      className={
-                        passwordChecks.special
-                          ? "text-teal-400"
-                          : "text-gray-400"
-                      }
-                    >
-                      Special characters (!@#$%^&*)
-                    </span>
-                  </div>
+                  <span>⚠️</span>
+                  <span>{error}</span>
                 </motion.div>
               )}
-            </div>
 
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="bg-red-500/10 border border-red-500/50 text-red-400 p-3 rounded-md text-sm flex items-start gap-2"
+              {/* SUBMIT BUTTON */}
+              <button
+                type="submit"
+                disabled={loading || !allChecksPassed}
+                className="mt-2 flex h-[51px] w-full items-center justify-center gap-3 rounded-[14px] bg-gradient-to-r from-teal-400 to-cyan-400 text-[1.08rem] font-bold text-slate-950 shadow-[0_0_26px_rgba(45,212,191,0.18)] transition-all duration-200 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-55 sm:h-[62px] sm:text-[1.15rem]"
               >
-                <span className="text-lg">⚠️</span>
-                <span>{error}</span>
-              </motion.div>
-            )}
+                {loading ? (
+                  <span className="flex items-center gap-2">
+                    <svg
+                      className="h-5 w-5 animate-spin text-slate-950"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
+                    </svg>
+                    Creating...
+                  </span>
+                ) : (
+                  <>
+                    <UserPlus size={20} strokeWidth={2.2} />
+                    <span>Sign Up</span>
+                  </>
+                )}
+              </button>
+            </motion.form>
 
-            <button
-              type="submit"
-              disabled={loading || !allChecksPassed}
-              className="w-full bg-teal-500 hover:bg-teal-400 text-slate-900 font-semibold py-3 rounded-lg shadow-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-teal-500"
-            >
-              {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg
-                    className="animate-spin h-5 w-5"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    ></circle>
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                  Creating Account...
-                </span>
-              ) : (
-                "Sign Up"
-              )}
-            </button>
-          </form>
+            {/* LOGIN LINK */}
+            <p className="mt-6 text-center text-[0.96rem] text-white/58 sm:mt-7 sm:text-[1rem]">
+              Already have an account?{" "}
+              <Link
+                href={`/login?returnTo=${encodeURIComponent(returnTo)}`}
+                className="font-semibold text-teal-400 transition-colors hover:text-teal-300"
+              >
+                Log In
+              </Link>
+            </p>
+          </motion.div>
 
-          <p className="text-center text-gray-400 mt-6 text-sm">
-            Already have an account?{" "}
-            <Link
-              href={`/login?returnTo=${encodeURIComponent(returnTo)}`}
-              className="text-teal-400 hover:text-teal-300 font-medium transition-colors"
-            >
-              Log In
-            </Link>
-          </p>
-        </motion.div>
-
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.6 }}
-          className="text-center text-gray-600 text-xs mt-6"
-        >
-          By signing up, you agree to our terms and privacy policy
-        </motion.p>
+          {/* FOOTER TEXT */}
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.22, duration: 0.4 }}
+            className="mt-5 flex items-center justify-center gap-2.5 text-[0.93rem] text-white/62 sm:mt-6 sm:text-[0.98rem]"
+          >
+            <ShieldCheck
+              className="h-[18px] w-[18px] text-teal-300 drop-shadow-[0_0_10px_rgba(45,212,191,0.24)] sm:h-5 sm:w-5"
+              strokeWidth={1.9}
+            />
+            <p>
+              Protected by Auth0 <span className="mx-1 text-white/30">•</span>{" "}
+              Secure signup
+            </p>
+          </motion.div>
+        </div>
       </div>
     </div>
   );

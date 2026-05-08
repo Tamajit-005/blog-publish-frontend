@@ -2,6 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
+/* HIDE SCROLLBAR BUT KEEP SCROLLING ENABLED */
+html,
+body {
+  overflow-x: hidden;
+
+  /* Firefox */
+  scrollbar-width: none;
+
+  /* IE / old Edge */
+  -ms-overflow-style: none;
+}
+
+/* Chrome, Edge, Safari */
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none;
+}
+
 body {
   @apply bg-slate-950 text-gray-100;
 }

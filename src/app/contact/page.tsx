@@ -1,9 +1,18 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { FaTwitter, FaGithub, FaInstagram } from "react-icons/fa";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import Image from "next/image";
+import {
+  Mail,
+  Clock3,
+  MapPin,
+  MessageCircle,
+  ArrowRight,
+  Send,
+  Info,
+} from "lucide-react";
 
 export default function ContactPage() {
   const [user, setUser] = useState<any>(null);
@@ -15,7 +24,6 @@ export default function ContactPage() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
-  // Check authentication and fetch user data
   useEffect(() => {
     const fetchUserData = async () => {
       try {
@@ -30,7 +38,6 @@ export default function ContactPage() {
           setName(data.username || "");
           setEmail(data.email || "");
         } else {
-          // User not logged in
           setUser(null);
         }
       } catch (err) {
@@ -75,278 +82,227 @@ export default function ContactPage() {
     }
   };
 
-  // Show loading while checking auth
-  if (isLoading) {
-    return (
-      <div className="w-full min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="text-teal-400 text-xl">Loading...</div>
-      </div>
-    );
-  }
+  const contactNotes = [
+    {
+      icon: Mail,
+      title: "Email Us",
+      text: "tamajitsaha05@gmail.com",
+    },
+    {
+      icon: Clock3,
+      title: "Response Time",
+      text: "We typically respond within 24 hours.",
+    },
+    {
+      icon: MapPin,
+      title: "Location",
+      text: "Working from the cloud · Serving creators worldwide.",
+    },
+  ];
 
-  // Show login prompt if not authenticated
-  if (!user) {
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 40 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
-        className="w-full min-h-screen bg-slate-950 text-gray-300 py-12 px-4"
-      >
-        <div className="max-w-3xl mx-auto bg-gray-900 rounded-lg shadow-lg p-6 md:p-10">
-          <h1 className="text-4xl font-bold text-teal-500 mb-6 text-center">
-            Contact Us
-          </h1>
-
-          <div className="bg-yellow-500/10 border-2 border-yellow-500 text-yellow-300 p-8 rounded-lg mb-6">
-            <div className="flex items-start gap-4 mb-4">
-              <span className="text-3xl">🔒</span>
-              <div>
-                <p className="text-xl font-semibold mb-3">
-                  Please Login or Register First
-                </p>
-                <p className="text-gray-300 mb-2 leading-relaxed">
-                  To send us a message, you must be logged in with the email
-                  address you want to use for communication.
-                </p>
-                <p className="text-gray-400 text-sm mb-4">
-                  Your message will be sent from your registered email address,
-                  and we'll reply to that same email.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex gap-4 justify-center mt-6">
-              <Link
-                href={`/login?returnTo=${encodeURIComponent("/contact")}`}
-                className="bg-teal-600 hover:bg-teal-500 text-white font-semibold px-8 py-3 rounded-md transition shadow-md"
-              >
-                Login
-              </Link>
-              <Link
-                href={`/signup?returnTo=${encodeURIComponent("/contact")}`}
-                className="bg-gray-700 hover:bg-gray-600 text-white font-semibold px-8 py-3 rounded-md transition shadow-md"
-              >
-                Register
-              </Link>
-            </div>
-          </div>
-
-          <div className="bg-slate-800 border border-slate-700 p-6 rounded-lg mb-6">
-            <h2 className="text-lg font-semibold text-teal-400 mb-3">
-              💡 Why do I need to login?
-            </h2>
-            <ul className="text-gray-400 text-sm space-y-2">
-              <li className="flex items-start gap-2">
-                <span className="text-teal-400 mt-1">•</span>
-                <span>We verify your identity to prevent spam and abuse</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-teal-400 mt-1">•</span>
-                <span>
-                  Your message will be sent from your registered email
-                </span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-teal-400 mt-1">•</span>
-                <span>
-                  We can track your conversation and reply to the correct
-                  address
-                </span>
-              </li>
-            </ul>
-          </div>
-
-          <p className="text-gray-400 text-center mb-4">
-            Or email us directly at{" "}
-            <a
-              href="mailto:tamajitsaha05@gmail.com"
-              className="text-teal-400 underline hover:text-teal-300 transition"
-            >
-              tamajitsaha05@gmail.com
-            </a>
-          </p>
-
-          <div className="mt-10 text-center">
-            <h2 className="text-xl font-semibold mb-3 text-teal-400">
-              Follow us:
-            </h2>
-            <div className="flex justify-center gap-6">
-              <a
-                href="https://x.com/tamajitsaha05"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-400 hover:text-teal-400 transition"
-                aria-label="Twitter"
-              >
-                <FaTwitter size={22} />
-              </a>
-              <a
-                href="https://github.com/Tamajit-005"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-400 hover:text-teal-400 transition"
-                aria-label="GitHub"
-              >
-                <FaGithub size={22} />
-              </a>
-              <a
-                href="https://www.instagram.com/tamajit005/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-400 hover:text-teal-400 transition"
-                aria-label="Instagram"
-              >
-                <FaInstagram size={22} />
-              </a>
-            </div>
-          </div>
-        </div>
-      </motion.div>
-    );
-  }
-
-  // Show contact form for authenticated users
   return (
     <motion.div
-      initial={{ opacity: 0, y: 40 }}
+      initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6 }}
-      className="w-full min-h-screen bg-slate-950 text-gray-300 py-12 px-4"
+      transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
     >
-      <div className="max-w-3xl mx-auto bg-gray-900 rounded-lg shadow-lg p-6 md:p-10">
-        <h1 className="text-4xl font-bold text-teal-500 mb-6 text-center">
-          Contact Us
-        </h1>
-
-        <div className="bg-teal-500/10 border border-teal-500 text-teal-300 p-4 rounded-md mb-6">
-          <p className="text-sm flex items-start gap-2">
-            <span className="text-lg">ℹ️</span>
-            <span>
-              Your message will be sent from <strong>{email}</strong>. We'll
-              reply to this email address.
-            </span>
-          </p>
-        </div>
-
-        <p className="text-gray-400 mb-8 text-center">
-          Have a question or want to collaborate? Fill out the form below or
-          email us at{" "}
-          <a
-            href="mailto:tamajitsaha05@gmail.com"
-            className="text-teal-400 underline hover:text-teal-300 transition"
-          >
-            tamajitsaha05@gmail.com
-          </a>
-          .
-        </p>
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Your Username"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              minLength={2}
-              maxLength={100}
-              className="w-full p-3 rounded-md bg-slate-800 text-gray-100 placeholder-gray-500 
-              focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
-            />
-          </div>
-
-          <div className="relative">
-            <input
-              type="email"
-              value={email}
-              readOnly
-              className="w-full p-3 rounded-md bg-slate-700 text-gray-400 cursor-not-allowed
-              border border-slate-600"
-            />
-            <span className="absolute right-3 top-3 text-xs text-gray-500">
-              🔒 Locked
-            </span>
-          </div>
-
-          <textarea
-            placeholder="Your Message"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            required
-            minLength={10}
-            maxLength={5000}
-            rows={5}
-            className="p-3 rounded-md bg-slate-800 text-gray-100 placeholder-gray-500 
-            focus:outline-none focus:ring-2 focus:ring-teal-500 transition resize-vertical"
+      <main className="relative min-h-screen overflow-hidden bg-[#04070c] text-white">
+        {/* BACKGROUND IMAGE - Locked height for mobile stability */}
+        <div className="fixed left-0 top-0 z-0 h-[100svh] w-full pointer-events-none">
+          <Image
+            src="/images/hero-bg.jpg"
+            alt="Palette Publisher background"
+            fill
+            priority
+            className="h-full w-full object-cover object-[60%_top] sm:object-top"
           />
 
-          {/* Success Message */}
-          {success && (
-            <div className="bg-green-500/10 border border-green-500 text-green-400 p-4 rounded-md flex items-start gap-3">
-              <span className="text-xl">✅</span>
-              <span className="flex-1">
-                Message sent successfully! We'll get back to you at{" "}
-                <strong>{email}</strong> soon.
-              </span>
-            </div>
-          )}
+          {/* DARKENING LAYERS */}
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(3,5,10,0.96)_0%,rgba(3,5,10,0.94)_28%,rgba(3,5,10,0.82)_45%,rgba(3,5,10,0.40)_65%,rgba(3,5,10,0.45)_80%,rgba(3,5,10,0.75)_100%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_75%_40%,rgba(45,212,191,0.06),transparent_20%)]" />
+          <div className="absolute inset-0 opacity-[0.035] bg-[radial-gradient(circle_at_center,_white_1px,_transparent_1px)] bg-[size:24px_24px]" />
+          <div className="absolute inset-x-0 bottom-0 h-[25%] bg-gradient-to-t from-[#02050a] via-[#02050a]/80 to-transparent" />
+          <div className="absolute inset-y-0 left-0 w-[40%] bg-gradient-to-r from-[#02050a] via-[#02050a]/90 to-transparent" />
+        </div>
 
-          {/* Error Message */}
-          {error && (
-            <div className="bg-red-500/10 border border-red-500 text-red-400 p-4 rounded-md flex items-start gap-3">
-              <span className="text-xl">❌</span>
-              <span className="flex-1">{error}</span>
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="bg-teal-600 hover:bg-teal-500 text-white font-medium px-6 py-3 rounded-md transition disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? "Sending..." : "Send Message"}
-          </button>
-        </form>
-
-        <div className="mt-10 text-center">
-          <h2 className="text-xl font-semibold mb-3 text-teal-400">
-            Follow us:
-          </h2>
-
-          <div className="flex justify-center gap-6">
-            <a
-              href="https://x.com/tamajitsaha05"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-gray-400 hover:text-teal-400 transition"
-              aria-label="Twitter"
+        {/* MAIN CONTENT CONTAINER */}
+        <div className="relative z-10 mx-auto max-w-[1440px] px-4 pb-20 pt-32 sm:px-6 md:px-8 lg:px-12 lg:pt-40">
+          <div className="grid gap-10 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.08fr)] lg:items-start lg:gap-12">
+            {/* LEFT COLUMN */}
+            <motion.section
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
+              className="order-1 max-w-[640px] lg:sticky lg:top-32 lg:self-start"
             >
-              <FaTwitter size={22} />
-            </a>
+              {/* HIDDEN ON MOBILE: hidden sm:inline-flex */}
+              <div className="hidden sm:inline-flex items-center gap-2 rounded-full border border-teal-400/18 bg-teal-400/[0.05] px-4 py-2 text-[14px] text-teal-300 shadow-[0_0_18px_rgba(45,212,191,0.08)] backdrop-blur-md">
+                <span className="h-2 w-2 rounded-full bg-teal-400 shadow-[0_0_12px_rgba(45,212,191,0.95)]" />
+                <span>We&apos;d love to hear from you</span>
+              </div>
 
-            <a
-              href="https://github.com/Tamajit-005"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-gray-400 hover:text-teal-400 transition"
-              aria-label="GitHub"
-            >
-              <FaGithub size={22} />
-            </a>
+              <div className="mt-7">
+                <h1 className="max-w-[11ch] text-[clamp(3rem,6vw,5.2rem)] font-black leading-[0.92] tracking-tight text-white">
+                  Let&apos;s Start a
+                  <span className="mt-1 block text-teal-400 drop-shadow-[0_0_18px_rgba(45,212,191,0.22)]">
+                    Conversation
+                  </span>
+                </h1>
 
-            <a
-              href="https://www.instagram.com/tamajit005/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-gray-400 hover:text-teal-400 transition"
-              aria-label="Instagram"
+                <p className="mt-7 max-w-[26rem] text-[clamp(1.02rem,1.15vw,1.2rem)] leading-8 text-white/78">
+                  Have a question, feedback, or just want to say hello?
+                  We&apos;re here for you. Reach out and we&apos;ll get back to
+                  you as soon as possible.
+                </p>
+              </div>
+
+              <div className="mt-10 space-y-6">
+                {contactNotes.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <div key={item.title} className="flex items-start gap-5">
+                      <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-teal-400/12 bg-black/35 shadow-[inset_0_0_12px_rgba(45,212,191,0.06),0_0_16px_rgba(45,212,191,0.08)] backdrop-blur-md">
+                        <Icon
+                          size={26}
+                          className="text-teal-300 drop-shadow-[0_0_10px_rgba(45,212,191,0.28)]"
+                          strokeWidth={1.8}
+                        />
+                      </div>
+                      <div className="pt-1">
+                        <h2 className="text-[1.05rem] font-semibold text-teal-300">
+                          {item.title}
+                        </h2>
+                        <p className="mt-1.5 max-w-[18rem] text-[1rem] leading-7 text-white/80">
+                          {item.text}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </motion.section>
+
+            {/* RIGHT COLUMN */}
+            <motion.section
+              initial={{ opacity: 0, y: 28 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{
+                duration: 0.72,
+                delay: 0.08,
+                ease: [0.22, 1, 0.36, 1],
+              }}
+              className="order-2"
             >
-              <FaInstagram size={22} />
-            </a>
+              <div className="rounded-[28px] border border-white/8 bg-white/[0.02] p-5 shadow-[0_0_40px_rgba(0,0,0,0.24)] backdrop-blur-sm sm:p-7 lg:p-8">
+                {/* INFO BOX */}
+                <div className="rounded-[22px] border border-teal-400/20 bg-teal-400/[0.03] p-4 shadow-[0_0_18px_rgba(45,212,191,0.06)] sm:p-5">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-teal-400 text-slate-950 shadow-[0_0_18px_rgba(45,212,191,0.2)]">
+                      <span className="flex items-center justify-center">
+                        <Info size={18} strokeWidth={2.5} />
+                      </span>
+                    </div>
+                    <p className="text-[0.98rem] leading-7 text-white/88 sm:text-[1.03rem]">
+                      Your message will be sent from{" "}
+                      <span className="font-semibold text-teal-300">
+                        {email || "your registered email"}
+                      </span>
+                      . We&apos;ll reply to this email address.
+                    </p>
+                  </div>
+                </div>
+
+                {/* FORM / LOGIN */}
+                {!user && !isLoading ? (
+                  <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                    <Link
+                      href={`/login?returnTo=${encodeURIComponent("/contact")}`}
+                      className="flex h-14 items-center justify-center rounded-2xl bg-gradient-to-r from-teal-400 to-cyan-400 px-5 text-[1.02rem] font-semibold text-slate-950 shadow-[0_0_20px_rgba(45,212,191,0.18)] transition hover:brightness-110"
+                    >
+                      Login
+                    </Link>
+                    <Link
+                      href={`/signup?returnTo=${encodeURIComponent("/contact")}`}
+                      className="flex h-14 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] px-5 text-[1.02rem] font-semibold text-white/86 shadow-[0_0_18px_rgba(255,255,255,0.04)] transition hover:bg-white/[0.05]"
+                    >
+                      Register
+                    </Link>
+                  </div>
+                ) : user ? (
+                  <form onSubmit={handleSubmit} className="mt-6">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <input
+                        type="text"
+                        placeholder="Your Name"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        required
+                        minLength={2}
+                        maxLength={100}
+                        className="h-14 w-full rounded-2xl border border-white/6 bg-[#101522] px-5 text-[1rem] text-white placeholder:text-white/35 outline-none transition focus:border-teal-400/35 focus:ring-2 focus:ring-teal-400/12"
+                      />
+                      <input
+                        type="email"
+                        value={email}
+                        readOnly
+                        className="h-14 w-full cursor-not-allowed rounded-2xl border border-white/6 bg-[#101522] px-5 text-[1rem] text-white/45 outline-none"
+                      />
+                    </div>
+
+                    <textarea
+                      placeholder="Your Message"
+                      value={message}
+                      onChange={(e) => setMessage(e.target.value)}
+                      required
+                      minLength={10}
+                      maxLength={5000}
+                      className="mt-4 w-full rounded-2xl border border-white/6 bg-[#101522] px-5 py-4 text-[1rem] text-white placeholder:text-white/35 outline-none transition focus:border-teal-400/35 focus:ring-2 focus:ring-teal-400/12 min-h-[180px] resize-y"
+                    />
+
+                    {/* ANIMATED SUCCESS MESSAGE */}
+                    {success && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -15 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mt-4 flex items-start gap-3 rounded-2xl border border-emerald-400/25 bg-emerald-400/[0.06] p-4 text-emerald-300"
+                      >
+                        <span className="mt-0.5 text-lg">✅</span>
+                        <span className="text-[0.98rem] leading-7">
+                          Message sent successfully! We&apos;ll get back to you
+                          at <strong>{email}</strong> soon.
+                        </span>
+                      </motion.div>
+                    )}
+
+                    {/* ANIMATED ERROR MESSAGE */}
+                    {error && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -15 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mt-4 flex items-start gap-3 rounded-2xl border border-red-400/25 bg-red-400/[0.06] p-4 text-red-300"
+                      >
+                        <span className="mt-0.5 text-lg">❌</span>
+                        <span className="text-[0.98rem] leading-7">
+                          {error}
+                        </span>
+                      </motion.div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="mt-6 flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-teal-400 to-cyan-400 px-5 text-[1.05rem] font-bold text-slate-950 shadow-[0_0_24px_rgba(45,212,191,0.25)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <span>{loading ? "Sending..." : "Send Message"}</span>
+                      <Send size={20} />
+                    </button>
+                  </form>
+                ) : null}
+              </div>
+            </motion.section>
           </div>
         </div>
-      </div>
+      </main>
     </motion.div>
   );
 }

@@ -5,6 +5,7 @@ import Navbar from "@/components/Navbar";
 import LayoutWrapper from "@/components/LayoutWrapper";
 import { Toaster } from "react-hot-toast";
 import { UserProvider } from "@auth0/nextjs-auth0/client";
+import GlobalSiteLoader from "@/components/GlobalSiteLoader";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({
@@ -25,11 +26,14 @@ export default function RootLayout({
   return (
     <html lang="en" className="scroll-smooth">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-slate-950 text-gray-100 min-h-screen flex flex-col`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-slate-950 text-gray-100 min-h-screen flex flex-col overflow-x-hidden`}
       >
-        {/* Wrap everything with UserProvider */}
         <UserProvider>
+          {/* Global Loader sits high up, but bypasses itself on "/" */}
+          <GlobalSiteLoader />
+
           <Navbar />
+
           <main className="flex-1">
             <LayoutWrapper>{children}</LayoutWrapper>
           </main>
