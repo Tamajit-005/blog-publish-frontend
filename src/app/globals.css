@@ -23,3 +23,43 @@ body::-webkit-scrollbar {
 body {
   @apply bg-slate-950 text-gray-100;
 }
+
+/* --- CUSTOM LIQUID GLASS SCROLLBAR (SLEEK GRAY) --- */
+
+/* 1. The Width/Height - Thin for premium look */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+/* 2. The Track - Transparent so the UI behind it shows through */
+::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 4px; /* Gives some breathing room */
+}
+
+/* 3. The Thumb - Subtle Gray with Glass effect */
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08); /* Faint gray glass */
+  border: 1px solid rgba(255, 255, 255, 0.05); /* Soft edge */
+  border-radius: 20px;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+/* 4. Hover State - Brighter Gray (No Teal Glow) */
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* 5. Active State - When clicking/dragging */
+::-webkit-scrollbar-thumb:active {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* 6. Firefox Support (Gray theme) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}

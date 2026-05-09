@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { AnimatePresence } from "framer-motion";
 import CinematicLoader from "@/components/CinematicLoader";
+import SecondaryLoader from "@/components/SecondaryLoader"; // Import new loader
 
 export default function GlobalSiteLoader() {
   const pathname = usePathname();
@@ -48,18 +49,14 @@ export default function GlobalSiteLoader() {
     return () => clearTimeout(timer);
   }, [checked, shouldShowIntro]);
 
-  // Define the showLoader state BEFORE any return statements
   const showLoader = useMemo(() => {
     if (!checked) return true;
     if (shouldShowIntro) return !introDone || !pageReady;
     return !pageReady;
   }, [checked, shouldShowIntro, introDone, pageReady]);
 
-  // --- RETURN LOGIC AT THE VERY END ---
+  // Handle Return
+  if (pathname === "/") return null; // Home page handles its own CinematicLoader
 
-  // If we are on the homepage, we return null here so the Home page's
-  // own loader can take over. All hooks have already run, so React is happy.
-  if (pathname === "/") return null;
-
-  return <AnimatePresence>{showLoader && <CinematicLoader />}</AnimatePresence>;
+  return <AnimatePresence>{showLoader && <SecondaryLoader />}</AnimatePresence>;
 }

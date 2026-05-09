@@ -62,7 +62,7 @@ const bottomCards = [
 export default function AboutPage() {
   return (
     <main className="relative w-full overflow-x-hidden bg-[#02050a] text-white xl:min-h-screen">
-      {/* BACKGROUND IMAGE - Changed to fixed to match Contact page perfectly */}
+      {/* BACKGROUND IMAGE */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <Image
           src="/images/hero-bg.jpg"

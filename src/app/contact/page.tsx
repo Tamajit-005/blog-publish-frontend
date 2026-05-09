@@ -135,7 +135,6 @@ export default function ContactPage() {
               transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
               className="order-1 max-w-[640px] lg:sticky lg:top-32 lg:self-start"
             >
-              {/* HIDDEN ON MOBILE: hidden sm:inline-flex */}
               <div className="hidden sm:inline-flex items-center gap-2 rounded-full border border-teal-400/18 bg-teal-400/[0.05] px-4 py-2 text-[14px] text-teal-300 shadow-[0_0_18px_rgba(45,212,191,0.08)] backdrop-blur-md">
                 <span className="h-2 w-2 rounded-full bg-teal-400 shadow-[0_0_12px_rgba(45,212,191,0.95)]" />
                 <span>We&apos;d love to hear from you</span>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 import CinematicLoader from "@/components/CinematicLoader";
+import SecondaryLoader from "@/components/SecondaryLoader"; // Added import
 
 type UserInfo = {
   username: string;
@@ -32,7 +33,6 @@ function GlassButton({
         willChange: "transform, opacity",
       }}
     >
-      {/* FAINT CLEAR TEAL TINT */}
       <span
         aria-hidden
         className="pointer-events-none absolute inset-0 rounded-[inherit]"
@@ -42,8 +42,6 @@ function GlassButton({
           zIndex: 0,
         }}
       />
-
-      {/* WET TOP REFLECTION */}
       <span
         aria-hidden
         className="pointer-events-none absolute inset-0 rounded-[inherit]"
@@ -53,8 +51,6 @@ function GlassButton({
           zIndex: 1,
         }}
       />
-
-      {/* HOVER ONLY - WATERY TEAL GLOW */}
       <span
         aria-hidden
         className="pointer-events-none absolute inset-0 rounded-[inherit] opacity-0 transition-opacity duration-300 group-hover:opacity-100"
@@ -66,7 +62,6 @@ function GlassButton({
           zIndex: 2,
         }}
       />
-
       <span
         className="relative z-10"
         style={{
@@ -147,7 +142,11 @@ export default function HomePage() {
 
   return (
     <>
-      <AnimatePresence>{showLoader && <CinematicLoader />}</AnimatePresence>
+      <AnimatePresence>
+        {showLoader &&
+          // Choice logic: If cold entry -> Cinematic. If navigation -> Secondary.
+          (isFirstVisit ? <CinematicLoader /> : <SecondaryLoader />)}
+      </AnimatePresence>
 
       <motion.main
         initial={{

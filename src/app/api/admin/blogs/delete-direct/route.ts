@@ -3,10 +3,8 @@ import { checkAdminAuth } from "@/lib/adminAuth";
 import dbConnect from "@/lib/mongoose";
 import Blog from "@/models/Blog";
 
-
 const STRAPI_URL = process.env.STRAPI_URL!.replace(new RegExp("/$"), "");
 const STRAPI_API_TOKEN = process.env.STRAPI_API_TOKEN!;
-
 
 /**
  * ONE GET — batch lookup by URL hash ($in filter).
@@ -33,15 +31,19 @@ async function lookupIdsByUrls(
     .map((h, i) => `filters[hash][$in][${i}]=${encodeURIComponent(h)}`)
     .join("&");
 
-  const res = await fetch(`${STRAPI_URL}/api/upload/files?${hashParams}`, {
-    headers: { Authorization: `Bearer ${jwt}` },
-  });
-  if (!res.ok) { console.warn("Batch hash lookup failed:", res.statusText); return []; }
+  try {
+    const res = await fetch(`${STRAPI_URL}/api/upload/files?${hashParams}`, {
+      headers: { Authorization: `Bearer ${jwt}` },
+    });
+    if (!res.ok) { console.warn("Batch hash lookup failed:", res.statusText); return []; }
 
-  const files = await res.json();
-  return Array.isArray(files) ? files.map((f: any) => f.id) : [];
+    const files = await res.json();
+    return Array.isArray(files) ? files.map((f: any) => f.id) : [];
+  } catch (err) {
+    console.warn("Batch hash lookup network error:", err);
+    return [];
+  }
 }
-
 
 /**
  * ONE GET — batch lookup by filename ($in filter).
@@ -57,20 +59,22 @@ async function lookupIdsByNames(
     .map((n, i) => `filters[name][$in][${i}]=${encodeURIComponent(n)}`)
     .join("&");
 
-  const res = await fetch(`${STRAPI_URL}/api/upload/files?${nameParams}`, {
-    headers: { Authorization: `Bearer ${jwt}` },
-  });
-  if (!res.ok) { console.warn("Batch name lookup failed:", res.statusText); return []; }
+  try {
+    const res = await fetch(`${STRAPI_URL}/api/upload/files?${nameParams}`, {
+      headers: { Authorization: `Bearer ${jwt}` },
+    });
+    if (!res.ok) { console.warn("Batch name lookup failed:", res.statusText); return []; }
 
-  const files = await res.json();
-  return Array.isArray(files) ? files.map((f: any) => f.id) : [];
+    const files = await res.json();
+    return Array.isArray(files) ? files.map((f: any) => f.id) : [];
+  } catch (err) {
+    console.warn("Batch name lookup network error:", err);
+    return [];
+  }
 }
-
 
 /**
  * Parallel DELETE — uses admin token directly on /api/upload/files/:id.
- * Cannot use /api/media/bulk-delete here — that route requires a user JWT,
- * not an admin API token.
  */
 async function adminDeleteStrapiFiles(ids: number[], jwt: string): Promise<void> {
   if (ids.length === 0) return;
@@ -92,7 +96,6 @@ async function adminDeleteStrapiFiles(ids: number[], jwt: string): Promise<void>
   console.log(`🗑️ Admin bulk deleted Strapi file ids: [${ids.join(", ")}]`);
 }
 
-
 function filenameFromBase64(base64?: string, fallback = "image"): string {
   if (!base64) return `${fallback}.png`;
   const nameMatch = base64.match(/name=([^;]+);base64,/);
@@ -107,7 +110,6 @@ function filenameFromBase64(base64?: string, fallback = "image"): string {
   };
   return `${fallback}.${extMap[mime] ?? "png"}`;
 }
-
 
 export async function DELETE(req: NextRequest) {
   try {
@@ -136,42 +138,49 @@ export async function DELETE(req: NextRequest) {
     } else {
       console.log("No strapiId stored — searching Strapi by slug:", blog.slug);
 
-      const findRes = await fetch(
-        `${STRAPI_URL}/api/blogs?filters[slug][$eq]=${blog.slug}&publicationState=preview&populate[cover][fields]=id`,
-        { headers: { Authorization: `Bearer ${jwt}` } }
-      );
+      try {
+        const findRes = await fetch(
+          `${STRAPI_URL}/api/blogs?filters[slug][$eq]=${blog.slug}&publicationState=preview&populate[cover][fields]=id`,
+          { headers: { Authorization: `Bearer ${jwt}` } }
+        );
 
-      if (!findRes.ok) {
-        console.warn("Strapi search failed — deleting MongoDB only.");
-        await Blog.findByIdAndDelete(blogId);
-        return NextResponse.json({ message: "Blog deleted (not found in Strapi)" });
+        if (findRes.ok) {
+          const findData = await findRes.json();
+          const entry = findData.data?.[0];
+
+          if (entry) {
+            strapiDocId = entry.documentId ?? String(entry.id);
+            const attrs = entry.attributes || entry;
+            const cover = attrs.cover?.data || attrs.cover;
+            coverIdFromStrapi = cover?.id;
+          } else {
+            console.log("Blog not found in Strapi, skipping Strapi deletion.");
+          }
+        } else {
+          console.warn("Strapi search returned error, skipping Strapi deletion.");
+        }
+      } catch (err) {
+        console.warn("Strapi network error during search, skipping Strapi deletion:", err);
       }
-
-      const findData = await findRes.json();
-      const entry = findData.data?.[0];
-
-      if (!entry) {
-        console.log("Blog not found in Strapi — deleting MongoDB only.");
-        await Blog.findByIdAndDelete(blogId);
-        return NextResponse.json({ message: "Blog deleted (not found in Strapi)" });
-      }
-
-      strapiDocId = entry.documentId ?? String(entry.id);
-      const attrs = entry.attributes || entry;
-      const cover = attrs.cover?.data || attrs.cover;
-      coverIdFromStrapi = cover?.id;
     }
 
     // STEP 2 — Delete the blog entry from Strapi
-    const deleteRes = await fetch(`${STRAPI_URL}/api/blogs/${strapiDocId}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${jwt}` },
-    });
-    if (!deleteRes.ok) {
-      const text = await deleteRes.text();
-      return NextResponse.json({ error: `Strapi deletion failed: ${text}` }, { status: deleteRes.status });
+    if (strapiDocId) {
+      try {
+        const deleteRes = await fetch(`${STRAPI_URL}/api/blogs/${strapiDocId}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${jwt}` },
+        });
+        if (!deleteRes.ok) {
+          const text = await deleteRes.text();
+          console.warn(`Strapi deletion failed: ${text}. Proceeding with MongoDB deletion anyway.`);
+        } else {
+          console.log("Strapi blog deleted:", strapiDocId);
+        }
+      } catch (err) {
+        console.warn("Strapi network error during deletion:", err);
+      }
     }
-    console.log("Strapi blog deleted:", strapiDocId);
 
     // STEP 3 — Collect all media URLs and legacy filenames
     const urlsToDelete: string[] = [];
@@ -180,7 +189,6 @@ export async function DELETE(req: NextRequest) {
     if (blog.strapiCoverUrl) {
       urlsToDelete.push(blog.strapiCoverUrl);
     } else if (coverIdFromStrapi) {
-      // Direct ID known from slug search — no need for hash lookup
       console.log("Cover will be deleted directly by id:", coverIdFromStrapi);
     }
 
@@ -193,25 +201,27 @@ export async function DELETE(req: NextRequest) {
       }
     }
 
-    // STEP 4 — ONE GET (URL hash lookup) + ONE GET (name lookup) in parallel
-    const [urlIds, nameIds] = await Promise.all([
-      lookupIdsByUrls(urlsToDelete, jwt),
-      lookupIdsByNames(legacyFilenames, jwt),
-    ]);
+    // STEP 4 & 5 — Parallel lookup and bulk delete media files
+    try {
+      const [urlIds, nameIds] = await Promise.all([
+        lookupIdsByUrls(urlsToDelete, jwt),
+        lookupIdsByNames(legacyFilenames, jwt),
+      ]);
 
-    // Merge in direct coverIdFromStrapi if applicable
-    const allIds = [...urlIds, ...nameIds];
-    if (coverIdFromStrapi && !allIds.includes(coverIdFromStrapi)) {
-      allIds.push(coverIdFromStrapi);
+      const allIds = [...urlIds, ...nameIds];
+      if (coverIdFromStrapi && !allIds.includes(coverIdFromStrapi)) {
+        allIds.push(coverIdFromStrapi);
+      }
+
+      await adminDeleteStrapiFiles(allIds, jwt);
+    } catch (mediaErr) {
+      console.warn("Error deleting media from Strapi:", mediaErr);
     }
 
-    // STEP 5 — ONE POST bulk delete
-    await adminDeleteStrapiFiles(allIds, jwt);
-
-    // STEP 6 — Delete MongoDB doc
+    // STEP 6 — Delete MongoDB doc (Always executes)
     await Blog.findByIdAndDelete(blogId);
 
-    return NextResponse.json({ message: "Blog and media deleted from Strapi and MongoDB" });
+    return NextResponse.json({ message: "Blog deleted successfully" });
   } catch (error: any) {
     console.error("Delete direct error:", error);
     return NextResponse.json({ error: error.message || "Delete failed" }, { status: 500 });

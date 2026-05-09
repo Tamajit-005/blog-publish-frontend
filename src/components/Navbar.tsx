@@ -79,7 +79,11 @@ const Navbar = () => {
     <>
       {/* Changed to absolute to scroll away */}
       <header className="absolute top-0 left-0 z-50 w-full">
-        <div className="mx-auto max-w-7xl px-4 md:px-10">
+        <div
+          className={`mx-auto max-w-7xl px-4 md:px-10 ${
+            profileOpen ? "pb-40 md:pb-0" : ""
+          }`}
+        >
           {/* Top Row: Logo + Actions */}
           <div className="flex h-[88px] md:h-24 items-center justify-between">
             {/* LOGO */}
@@ -187,7 +191,6 @@ const Navbar = () => {
                         className="group relative hidden sm:flex h-[38px] md:h-11 items-center justify-center overflow-hidden rounded-[14px] md:rounded-[18px] px-5 md:px-6 text-[14px] md:text-[15px] font-medium tracking-wide text-white/80 transition-all duration-300 ease-out hover:px-8 hover:py-3 hover:rounded-[22px] hover:z-20 hover:text-white"
                         style={{ transformOrigin: "center center" }}
                       >
-                        {/* BEND */}
                         <span
                           aria-hidden
                           className="pointer-events-none absolute inset-0 rounded-[inherit] transition-all duration-300"
@@ -199,7 +202,6 @@ const Navbar = () => {
                           }}
                         />
 
-                        {/* FACE */}
                         <span
                           aria-hidden
                           className="pointer-events-none absolute inset-0 rounded-[inherit] transition-all duration-300 group-hover:shadow-[0_8px_32px_rgba(0,0,0,0.22),0_0_24px_rgba(0,0,0,0.12)]"
@@ -210,7 +212,6 @@ const Navbar = () => {
                           }}
                         />
 
-                        {/* EDGE */}
                         <span
                           aria-hidden
                           className="pointer-events-none absolute inset-0 rounded-[inherit] transition-all duration-300"
@@ -221,7 +222,6 @@ const Navbar = () => {
                           }}
                         />
 
-                        {/* HOVER GLOW — neutral white, no colour */}
                         <span
                           aria-hidden
                           className="pointer-events-none absolute inset-0 rounded-[inherit] opacity-0 transition-all duration-300 group-hover:opacity-100"
@@ -245,7 +245,6 @@ const Navbar = () => {
                         className="group relative flex h-[38px] md:h-11 items-center justify-center overflow-hidden rounded-full md:rounded-[18px] bg-teal-400 px-5 md:px-6 text-[14px] md:text-[15px] font-semibold text-black transition-all duration-300 ease-out hover:px-8 hover:py-3 hover:rounded-[22px] hover:scale-[1.0] hover:bg-teal-300"
                         style={{ transformOrigin: "center center" }}
                       >
-                        {/* HOVER GLOW AURA */}
                         <span
                           aria-hidden
                           className="pointer-events-none absolute inset-0 rounded-[inherit] opacity-0 transition-all duration-300 group-hover:opacity-100"
@@ -258,7 +257,6 @@ const Navbar = () => {
                           }}
                         />
 
-                        {/* EDGE RIM on hover */}
                         <span
                           aria-hidden
                           className="pointer-events-none absolute inset-0 rounded-[inherit] opacity-0 transition-all duration-300 group-hover:opacity-100"
@@ -285,7 +283,6 @@ const Navbar = () => {
                         className="group relative flex h-[36px] md:h-11 items-center justify-center overflow-hidden rounded-full md:rounded-[18px] bg-teal-400 px-4 md:px-6 text-[14px] md:text-[15px] font-semibold text-black transition-all duration-300 ease-out hover:px-8 hover:py-3 hover:rounded-[22px] hover:bg-teal-300"
                         style={{ transformOrigin: "center center" }}
                       >
-                        {/* HOVER GLOW AURA */}
                         <span
                           aria-hidden
                           className="pointer-events-none absolute inset-0 rounded-[inherit] opacity-0 transition-all duration-300 group-hover:opacity-100"
@@ -298,7 +295,6 @@ const Navbar = () => {
                           }}
                         />
 
-                        {/* EDGE RIM on hover */}
                         <span
                           aria-hidden
                           className="pointer-events-none absolute inset-0 rounded-[inherit] opacity-0 transition-all duration-300 group-hover:opacity-100"
@@ -327,7 +323,6 @@ const Navbar = () => {
                           onClick={() => setProfileOpen((prev) => !prev)}
                           className="group relative flex h-10 w-10 md:h-11 md:w-11 items-center justify-center overflow-hidden rounded-full text-[13px] md:text-sm font-bold text-teal-300 transition-all duration-500 hover:scale-110"
                         >
-                          {/* BEND */}
                           <span
                             aria-hidden
                             className="pointer-events-none absolute inset-0 rounded-full"
@@ -338,7 +333,6 @@ const Navbar = () => {
                               zIndex: 0,
                             }}
                           />
-                          {/* FACE */}
                           <span
                             aria-hidden
                             className="pointer-events-none absolute inset-0 rounded-full"
@@ -349,7 +343,6 @@ const Navbar = () => {
                               zIndex: 1,
                             }}
                           />
-                          {/* EDGE */}
                           <span
                             aria-hidden
                             className="pointer-events-none absolute inset-0 rounded-full"
@@ -360,7 +353,6 @@ const Navbar = () => {
                               zIndex: 2,
                             }}
                           />
-                          {/* HOVER GLOW */}
                           <span
                             aria-hidden
                             className="pointer-events-none absolute inset-0 rounded-full opacity-0 transition-all duration-500 group-hover:opacity-100"
@@ -384,7 +376,7 @@ const Navbar = () => {
                               animate={{ opacity: 1, y: 0, scale: 1 }}
                               exit={{ opacity: 0, y: 10, scale: 0.985 }}
                               transition={{ duration: 0.18, ease: "easeOut" }}
-                              className="absolute right-0 mt-3 w-60 overflow-hidden rounded-[28px]"
+                              className="absolute right-0 mt-3 w-60 overflow-hidden rounded-[28px] z-[60]"
                               style={{
                                 background: "rgba(12,12,12,0.14)",
                                 border: "1px solid rgba(255,255,255,0.08)",
@@ -396,7 +388,6 @@ const Navbar = () => {
                               }}
                             >
                               <div className="relative overflow-hidden rounded-[28px]">
-                                {/* BEND */}
                                 <span
                                   aria-hidden
                                   className="pointer-events-none absolute inset-0 rounded-[28px]"
@@ -408,7 +399,6 @@ const Navbar = () => {
                                     zIndex: 0,
                                   }}
                                 />
-                                {/* FACE */}
                                 <span
                                   aria-hidden
                                   className="pointer-events-none absolute inset-0 rounded-[28px]"
@@ -419,7 +409,6 @@ const Navbar = () => {
                                     zIndex: 1,
                                   }}
                                 />
-                                {/* EDGE */}
                                 <span
                                   aria-hidden
                                   className="pointer-events-none absolute inset-0 rounded-[28px]"
@@ -430,7 +419,6 @@ const Navbar = () => {
                                     zIndex: 2,
                                   }}
                                 />
-                                {/* TOP LIGHT SWEEP */}
                                 <span
                                   aria-hidden
                                   className="pointer-events-none absolute inset-x-4 top-0 h-14 rounded-full blur-xl"
@@ -440,7 +428,6 @@ const Navbar = () => {
                                     zIndex: 3,
                                   }}
                                 />
-                                {/* CONTENT */}
                                 <div className="relative z-10">
                                   <div className="border-b border-white/8 px-5 py-4">
                                     <p className="mb-2 text-xs uppercase tracking-[0.25em] text-white/60">
@@ -572,7 +559,9 @@ const Navbar = () => {
                     className={active ? "text-teal-300" : "text-white/50"}
                   />
                   <span
-                    className={`${active ? "text-teal-300 font-medium" : "text-white/70"}`}
+                    className={`${
+                      active ? "text-teal-300 font-medium" : "text-white/70"
+                    }`}
                   >
                     {link.label}
                   </span>

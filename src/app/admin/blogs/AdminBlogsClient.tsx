@@ -3,6 +3,18 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
+import {
+  LayoutGrid,
+  Clock,
+  Trash2,
+  Edit3,
+  Eye,
+  Check,
+  X,
+  FileText,
+} from "lucide-react";
+import PyramidLoader from "@/components/PyramidLoader";
 
 interface Blog {
   _id: string;
@@ -29,12 +41,44 @@ interface Blog {
   };
 }
 
-const tabs = [
-  { id: "manage" as const, label: "Manage", activeColor: "bg-emerald-700" },
-  { id: "pending" as const, label: "Pending", activeColor: "bg-teal-600" },
-  { id: "deletion" as const, label: "Deletion", activeColor: "bg-red-600" },
-  { id: "edits" as const, label: "Edits", activeColor: "bg-blue-600" },
-];
+const TABS_CONFIG = [
+  {
+    id: "manage",
+    label: "All Blogs",
+    icon: LayoutGrid,
+    color: "text-teal-400",
+    hoverColor: "hover:text-teal-400",
+    border: "border-teal-400",
+    bg: "bg-teal-400/10",
+  },
+  {
+    id: "pending",
+    label: "Pending",
+    icon: Clock,
+    color: "text-yellow-500",
+    hoverColor: "hover:text-yellow-500",
+    border: "border-yellow-500",
+    bg: "bg-yellow-500/10",
+  },
+  {
+    id: "deletion",
+    label: "Deletion",
+    icon: Trash2,
+    color: "text-red-500",
+    hoverColor: "hover:text-red-500",
+    border: "border-red-500",
+    bg: "bg-red-500/10",
+  },
+  {
+    id: "edits",
+    label: "Edits",
+    icon: Edit3,
+    color: "text-blue-400",
+    hoverColor: "hover:text-blue-400",
+    border: "border-blue-400",
+    bg: "bg-blue-400/10",
+  },
+] as const;
 
 export default function AdminBlogsClient() {
   const router = useRouter();
@@ -44,7 +88,7 @@ export default function AdminBlogsClient() {
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<
     "manage" | "pending" | "deletion" | "edits"
-  >("pending");
+  >("manage");
 
   useEffect(() => {
     if (activeTab === "manage") fetchAllBlogs();
@@ -53,7 +97,6 @@ export default function AdminBlogsClient() {
     else fetchEditRequests();
   }, [activeTab]);
 
-  // Fetches all blogs for admin management (Manage tab)
   async function fetchAllBlogs() {
     setLoading(true);
     try {
@@ -67,7 +110,6 @@ export default function AdminBlogsClient() {
     }
   }
 
-  // Fetches blogs awaiting admin approval
   async function fetchPendingBlogs() {
     setLoading(true);
     try {
@@ -81,7 +123,6 @@ export default function AdminBlogsClient() {
     }
   }
 
-  // Fetches blogs with pending deletion requests from authors
   async function fetchDeletionRequests() {
     setLoading(true);
     try {
@@ -95,7 +136,6 @@ export default function AdminBlogsClient() {
     }
   }
 
-  // Fetches blogs with pending edit requests from authors
   async function fetchEditRequests() {
     setLoading(true);
     try {
@@ -109,7 +149,6 @@ export default function AdminBlogsClient() {
     }
   }
 
-  // Directly deletes a blog from MongoDB and Strapi (admin-only, Manage tab)
   async function deleteBlog(e: React.MouseEvent, blogId: string) {
     e.stopPropagation();
     if (!confirm("Delete this blog permanently? This cannot be undone."))
@@ -130,7 +169,6 @@ export default function AdminBlogsClient() {
     }
   }
 
-  // Approves a pending blog and publishes it to Strapi
   async function handleApprove(e: React.MouseEvent, blogId: string) {
     e.stopPropagation();
     if (!confirm("Approve and publish this blog?")) return;
@@ -145,7 +183,6 @@ export default function AdminBlogsClient() {
     }
   }
 
-  // Rejects a pending blog with an admin-provided reason
   async function handleReject(e: React.MouseEvent, blogId: string) {
     e.stopPropagation();
     const reason = prompt("Reason for rejection:");
@@ -161,7 +198,6 @@ export default function AdminBlogsClient() {
     }
   }
 
-  // Approves a deletion request — permanently deletes blog from Strapi and MongoDB
   async function handleApproveDelete(e: React.MouseEvent, blogId: string) {
     e.stopPropagation();
     if (!confirm("This will permanently delete the blog. Continue?")) return;
@@ -176,8 +212,6 @@ export default function AdminBlogsClient() {
     }
   }
 
-  // Rejection of deletion request clears deletionRequested flag,
-  // sets isDeletionRejected to true, and stores admin notes for the author
   async function handleRejectDelete(e: React.MouseEvent, blogId: string) {
     e.stopPropagation();
     const reason = prompt("Reason for rejecting this deletion request:");
@@ -196,7 +230,6 @@ export default function AdminBlogsClient() {
     }
   }
 
-  // Approves pending edit, applies changes, and pushes updated blog to Strapi
   async function handleApproveEdit(e: React.MouseEvent, blogId: string) {
     e.stopPropagation();
     if (!confirm("Approve these edits and push to live site?")) return;
@@ -211,7 +244,6 @@ export default function AdminBlogsClient() {
     }
   }
 
-  // Rejects a pending edit with an admin-provided reason
   async function handleRejectEdit(e: React.MouseEvent, blogId: string) {
     e.stopPropagation();
     const reason = prompt("Reason for rejection:");
@@ -227,36 +259,165 @@ export default function AdminBlogsClient() {
     }
   }
 
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 40 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6 }}
-      className="min-h-screen bg-slate-950 text-gray-100 px-4 md:px-6 py-8 md:py-12"
-    >
-      <div className="max-w-7xl mx-auto">
-        {/* HEADER — stacked on mobile, side-by-side on desktop */}
-        <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 mb-6">
-          <h1 className="text-3xl md:text-4xl font-bold text-teal-400">
-            Admin Dashboard
-          </h1>
+  const formatDate = (dateString: string) => {
+    const d = new Date(dateString);
+    const date = d.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+    const time = d.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    return { date, time };
+  };
 
-          {/* TABS — scrollable on mobile */}
-          <div className="overflow-x-auto pb-1">
-            <div className="flex space-x-1 bg-gray-900 p-1 rounded-lg w-max overflow-hidden">
-              {tabs.map((tab) => (
+  const getInitials = (name: string) => {
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .substring(0, 2)
+      .toUpperCase();
+  };
+
+  const getStatusBadge = (status: string, tab: string) => {
+    if (tab === "pending" || status === "pending")
+      return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border border-yellow-500/30 bg-yellow-500/10 text-yellow-500">
+          <Clock size={12} /> Pending
+        </span>
+      );
+    if (tab === "deletion")
+      return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border border-red-500/30 bg-red-500/10 text-red-500">
+          <Trash2 size={12} /> Deletion Req
+        </span>
+      );
+    if (tab === "edits" || status === "edits")
+      return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border border-blue-400/30 bg-blue-400/10 text-blue-400">
+          <Edit3 size={12} /> Edit Pending
+        </span>
+      );
+    if (status === "published" || status === "approved")
+      return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border border-emerald-500/30 bg-emerald-500/10 text-emerald-500">
+          <Check size={12} /> Approved
+        </span>
+      );
+    if (status === "rejected")
+      return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border border-red-500/30 bg-red-500/10 text-red-500">
+          <X size={12} /> Rejected
+        </span>
+      );
+    return (
+      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border border-gray-500/30 bg-gray-500/10 text-gray-400">
+        Draft
+      </span>
+    );
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#04070c]">
+        <PyramidLoader />
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {/* STATIC HERO BACKGROUND */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <Image
+          src="/images/hero-bg.jpg"
+          alt="Palette Publisher background"
+          fill
+          priority
+          className="h-full w-full object-cover object-[60%_top] sm:object-top"
+        />
+
+        {/* DARKENING LAYERS */}
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(3,5,10,0.96)_0%,rgba(3,5,10,0.94)_28%,rgba(3,5,10,0.82)_45%,rgba(3,5,10,0.40)_65%,rgba(3,5,10,0.45)_80%,rgba(3,5,10,0.75)_100%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_75%_40%,rgba(45,212,191,0.06),transparent_20%)]" />
+        <div className="absolute inset-0 opacity-[0.035] bg-[radial-gradient(circle_at_center,_white_1px,_transparent_1px)] bg-[size:24px_24px]" />
+        <div className="absolute inset-x-0 bottom-0 h-[25%] bg-gradient-to-t from-[#02050a] via-[#02050a]/80 to-transparent" />
+        <div className="absolute inset-y-0 left-0 w-[40%] bg-gradient-to-r from-[#02050a] via-[#02050a]/90 to-transparent" />
+      </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        className="relative z-10 min-h-screen text-white overflow-hidden pb-20"
+      >
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 lg:px-12 pt-44 lg:pt-40">
+          {/* HEADER SECTION */}
+          <div className="flex flex-row items-start justify-between gap-3 sm:gap-6 mb-8 sm:mb-10">
+            <div className="flex flex-col pt-0 sm:pt-1">
+              <h1 className="text-[1.8rem] sm:text-[2.6rem] font-bold tracking-tight text-white leading-tight">
+                Admin{" "}
+                <span className="text-teal-400 drop-shadow-[0_0_12px_rgba(45,212,191,0.2)]">
+                  Blogs
+                </span>
+              </h1>
+              <p className="mt-1 sm:mt-1.5 text-[0.8rem] sm:text-[0.98rem] text-white/60 max-w-[240px] sm:max-w-sm leading-relaxed sm:leading-snug">
+                Review and manage all submitted blogs from your platform.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2.5 sm:gap-4 rounded-[14px] sm:rounded-2xl border border-white/8 bg-white/[0.02] p-2.5 sm:p-4 backdrop-blur-md shrink-0">
+              <div className="flex h-8 w-8 sm:h-12 sm:w-12 items-center justify-center rounded-md sm:rounded-[12px] bg-teal-400/10 border border-teal-400/20">
+                <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-teal-300" />
+              </div>
+              <div className="flex flex-col justify-center">
+                <p className="text-[0.6rem] sm:text-[0.8rem] uppercase tracking-wider text-white/50 font-medium leading-none mb-1 sm:mb-1.5">
+                  Total Blogs
+                </p>
+                <p className="text-[1.2rem] sm:text-2xl font-bold text-teal-400 leading-none">
+                  {blogs.length}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* TABS SECTION */}
+          <div className="mb-8 flex overflow-x-auto pb-4 gap-2 sm:gap-4 border-b border-white/10 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            {TABS_CONFIG.map((tab) => {
+              const isActive = activeTab === tab.id;
+              const Icon = tab.icon;
+              return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className="relative px-3 py-2 md:px-4 rounded-md text-xs md:text-sm font-medium transition-colors duration-200 z-10 whitespace-nowrap"
-                  style={{
-                    color: activeTab === tab.id ? "white" : "rgb(156 163 175)",
-                  }}
+                  onClick={() => setActiveTab(tab.id as any)}
+                  className={`relative flex items-center gap-2 px-3 py-3 sm:px-5 sm:py-4 text-[0.85rem] sm:text-[0.92rem] font-medium transition-all duration-300 whitespace-nowrap ${
+                    isActive
+                      ? `${tab.color}`
+                      : `text-white/100 ${tab.hoverColor}`
+                  }`}
                 >
-                  {activeTab === tab.id && (
-                    <motion.span
-                      layoutId="activeTabPill"
-                      className={`absolute inset-0 rounded-md ${tab.activeColor}`}
+                  <Icon size={16} className={isActive ? "" : "opacity-60"} />
+                  {tab.label}
+                  <span
+                    className={`ml-1.5 px-2 py-0.5 rounded-full text-[0.7rem] font-bold ${
+                      isActive
+                        ? "bg-white/10 text-white"
+                        : "bg-white/5 text-white/30"
+                    }`}
+                  >
+                    {isActive ? blogs.length : "-"}
+                  </span>
+
+                  {isActive && (
+                    <motion.div
+                      layoutId="adminActiveTab"
+                      className={`absolute bottom-0 left-0 right-0 h-[2px] ${tab.bg.replace(
+                        "/10",
+                        "",
+                      )} shadow-[0_0_12px_currentColor]`}
                       transition={{
                         type: "spring",
                         stiffness: 400,
@@ -264,203 +425,289 @@ export default function AdminBlogsClient() {
                       }}
                     />
                   )}
-                  <span className="relative z-10">{tab.label}</span>
                 </button>
-              ))}
-            </div>
+              );
+            })}
           </div>
-        </div>
 
-        {/* CONTENT */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={`${activeTab}-${loading}`}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.25, ease: "easeOut" }}
-          >
-            {loading ? (
-              <div className="text-center mt-20 text-teal-400">Loading...</div>
-            ) : blogs.length === 0 ? (
-              <p className="text-center text-gray-400 mt-20">No blogs found.</p>
-            ) : (
-              <div className="space-y-4 md:space-y-6">
-                {blogs.map((blog) => {
-                  // In the edits tab, display pending edit data if available
-                  const displayTitle =
-                    activeTab === "edits" && blog.pendingEdit?.title
-                      ? blog.pendingEdit.title
-                      : blog.title;
+          {/* CONTENT CONTAINER */}
+          <div className="bg-[#0b1019]/80 border border-white/5 rounded-2xl backdrop-blur-xl overflow-hidden min-h-[400px]">
+            {/* DESKTOP TABLE HEADER */}
+            <div className="hidden lg:grid grid-cols-[3fr_1.5fr_1fr_1fr_1fr_auto] gap-4 px-6 py-4 border-b border-white/5 bg-white/[0.02]">
+              <span className="text-[0.7rem] font-semibold text-white/40 tracking-wider uppercase">
+                Blog
+              </span>
+              <span className="text-[0.7rem] font-semibold text-white/40 tracking-wider uppercase">
+                Author
+              </span>
+              <span className="text-[0.7rem] font-semibold text-white/40 tracking-wider uppercase">
+                Category
+              </span>
+              <span className="text-[0.7rem] font-semibold text-white/40 tracking-wider uppercase">
+                Status
+              </span>
+              <span className="text-[0.7rem] font-semibold text-white/40 tracking-wider uppercase">
+                Submitted On
+              </span>
+              <span className="text-[0.7rem] font-semibold text-white/40 tracking-wider uppercase text-center w-24">
+                Actions
+              </span>
+            </div>
 
-                  const displayDescription =
-                    activeTab === "edits" && blog.pendingEdit?.description
-                      ? blog.pendingEdit.description
-                      : blog.description;
+            {/* LIST */}
+            <AnimatePresence mode="wait">
+              {blogs.length === 0 ? (
+                <motion.div
+                  key="empty"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex flex-col items-center justify-center py-24 text-center"
+                >
+                  <FileText className="h-12 w-12 text-white/10 mb-4" />
+                  <p className="text-[1.05rem] text-white/40">
+                    No blogs found in this category.
+                  </p>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="list"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex flex-col"
+                >
+                  {blogs.map((blog) => {
+                    const displayTitle =
+                      activeTab === "edits" && blog.pendingEdit?.title
+                        ? blog.pendingEdit.title
+                        : blog.title;
 
-                  const displayCoverImage =
-                    activeTab === "edits" && blog.pendingEdit != null
-                      ? blog.pendingEdit.coverImage
-                      : blog.coverImage;
+                    const displayDescription =
+                      activeTab === "edits" && blog.pendingEdit?.description
+                        ? blog.pendingEdit.description
+                        : blog.description;
 
-                  const displayCategories =
-                    activeTab === "edits" && blog.pendingEdit?.categories
-                      ? blog.pendingEdit.categories
-                      : blog.categories;
+                    const displayCoverImage =
+                      activeTab === "edits" && blog.pendingEdit != null
+                        ? blog.pendingEdit.coverImage
+                        : blog.coverImage;
 
-                  return (
-                    <motion.div
-                      key={blog._id}
-                      whileHover={{ scale: 1.01 }}
-                      onClick={() => router.push(`/admin/blogs/${blog._id}`)}
-                      className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden cursor-pointer hover:border-teal-500 transition-colors"
-                    >
-                      <div className="flex flex-row">
-                        {/* COVER IMAGE — small thumbnail on mobile, wide panel on desktop */}
-                        <div className="w-24 md:w-80 md:h-64 flex-shrink-0 self-stretch">
-                          {displayCoverImage ? (
-                            <img
-                              src={displayCoverImage}
-                              className="w-full h-full object-cover"
-                              alt={displayTitle}
-                            />
-                          ) : (
-                            <div className="w-full h-full bg-gray-800 flex items-center justify-center text-gray-600 text-xs">
-                              No Image
+                    const displayCategories =
+                      activeTab === "edits" && blog.pendingEdit?.categories
+                        ? blog.pendingEdit.categories
+                        : blog.categories;
+
+                    const primaryCategory =
+                      displayCategories?.[0] || "Uncategorized";
+                    const { date, time } = formatDate(blog.createdAt);
+                    const authorInitials = getInitials(blog.author.username);
+
+                    const ActionButtons = () => (
+                      <>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            router.push(`/admin/blogs/${blog._id}`);
+                          }}
+                          className="flex h-9 w-12 lg:w-10 items-center justify-center rounded-[10px] border border-white/10 text-white/40 hover:text-white hover:border-white/30 hover:bg-white/5 transition-all"
+                          title="View Details"
+                        >
+                          <Eye size={16} strokeWidth={2} />
+                        </button>
+
+                        {activeTab === "manage" && (
+                          <button
+                            onClick={(e) => deleteBlog(e, blog._id)}
+                            className="flex h-9 w-12 lg:w-10 items-center justify-center rounded-[10px] border border-red-500/20 text-red-400 hover:bg-red-500/10 transition-all"
+                            title="Delete Blog"
+                          >
+                            <Trash2 size={16} strokeWidth={2} />
+                          </button>
+                        )}
+
+                        {activeTab === "pending" && (
+                          <>
+                            <button
+                              onClick={(e) => handleApprove(e, blog._id)}
+                              className="flex h-9 w-12 lg:w-10 items-center justify-center rounded-[10px] border border-teal-500/20 text-teal-400 hover:bg-teal-500/10 transition-all"
+                              title="Approve Blog"
+                            >
+                              <Check size={18} strokeWidth={2.5} />
+                            </button>
+                            <button
+                              onClick={(e) => handleReject(e, blog._id)}
+                              className="flex h-9 w-12 lg:w-10 items-center justify-center rounded-[10px] border border-red-500/20 text-red-400 hover:bg-red-500/10 transition-all"
+                              title="Reject Blog"
+                            >
+                              <X size={18} strokeWidth={2.5} />
+                            </button>
+                          </>
+                        )}
+
+                        {activeTab === "deletion" && (
+                          <>
+                            <button
+                              onClick={(e) => handleApproveDelete(e, blog._id)}
+                              className="flex h-9 w-12 lg:w-10 items-center justify-center rounded-[10px] border border-red-500/20 text-red-400 hover:bg-red-500/10 transition-all"
+                              title="Confirm Deletion"
+                            >
+                              <Trash2 size={16} strokeWidth={2} />
+                            </button>
+                            <button
+                              onClick={(e) => handleRejectDelete(e, blog._id)}
+                              className="flex h-9 w-12 lg:w-10 items-center justify-center rounded-[10px] border border-white/10 text-white/40 hover:text-white hover:border-white/30 hover:bg-white/5 transition-all"
+                              title="Reject Deletion Request"
+                            >
+                              <X size={18} strokeWidth={2.5} />
+                            </button>
+                          </>
+                        )}
+
+                        {activeTab === "edits" && (
+                          <>
+                            <button
+                              onClick={(e) => handleApproveEdit(e, blog._id)}
+                              className="flex h-9 w-12 lg:w-10 items-center justify-center rounded-[10px] border border-teal-500/20 text-teal-400 hover:bg-teal-500/10 transition-all"
+                              title="Approve Edits"
+                            >
+                              <Check size={18} strokeWidth={2.5} />
+                            </button>
+                            <button
+                              onClick={(e) => handleRejectEdit(e, blog._id)}
+                              className="flex h-9 w-12 lg:w-10 items-center justify-center rounded-[10px] border border-red-500/20 text-red-400 hover:bg-red-500/10 transition-all"
+                              title="Reject Edits"
+                            >
+                              <X size={18} strokeWidth={2.5} />
+                            </button>
+                          </>
+                        )}
+                      </>
+                    );
+
+                    return (
+                      <div
+                        key={blog._id}
+                        className="group hover:bg-white/[0.02] transition-colors"
+                      >
+                        {/* DESKTOP ROW */}
+                        <div className="hidden lg:grid grid-cols-[3fr_1.5fr_1fr_1fr_1fr_auto] gap-4 items-center px-6 py-4 border-b border-white/5">
+                          <div className="flex gap-4 items-center overflow-hidden pr-4">
+                            <div className="w-16 h-16 shrink-0 rounded-[10px] overflow-hidden bg-[#06080d] border border-white/5">
+                              {displayCoverImage ? (
+                                <img
+                                  src={displayCoverImage}
+                                  alt={displayTitle}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center">
+                                  <FileText className="w-6 h-6 text-white/10" />
+                                </div>
+                              )}
                             </div>
-                          )}
+                            <div className="flex flex-col min-w-0">
+                              <h2 className="text-[0.95rem] font-semibold text-white/90 truncate">
+                                {displayTitle || "Untitled"}
+                              </h2>
+                              <p className="text-[0.75rem] text-white/40 truncate mt-0.5">
+                                {displayDescription || "No description"}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3 overflow-hidden pr-2">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-teal-500/10 border border-teal-500/20 text-teal-400 text-xs font-bold">
+                              {authorInitials}
+                            </div>
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-[0.85rem] text-white/90 truncate">
+                                {blog.author.username}
+                              </span>
+                              <span className="text-[0.7rem] text-white/40 truncate">
+                                {blog.author.email}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div>
+                            <span className="px-3 py-1 text-[0.7rem] font-medium rounded-full border border-teal-500/30 text-teal-300 bg-teal-500/5 whitespace-nowrap">
+                              {primaryCategory}
+                            </span>
+                          </div>
+
+                          <div>{getStatusBadge(blog.status, activeTab)}</div>
+
+                          <div className="flex flex-col text-[0.8rem] text-white/60">
+                            <span className="text-white/80">{date}</span>
+                            <span className="text-[0.7rem] text-white/40">
+                              {time}
+                            </span>
+                          </div>
+
+                          <div className="flex gap-2 justify-center w-24">
+                            <ActionButtons />
+                          </div>
                         </div>
 
-                        <div className="p-3 md:p-6 flex-1 min-w-0">
-                          {/* TITLE + EDIT PENDING BADGE */}
-                          <div className="flex items-start justify-between mb-1 md:mb-2 gap-2">
-                            <h2 className="text-sm md:text-xl font-semibold line-clamp-2">
-                              {displayTitle}
-                            </h2>
-                            {activeTab === "edits" && (
-                              <span className="text-[10px] md:text-xs px-1.5 py-0.5 bg-blue-500/20 text-blue-400 border border-blue-500/50 rounded flex-shrink-0">
-                                Edit Pending
-                              </span>
-                            )}
-                          </div>
-
-                          {/* DESCRIPTION — hidden on mobile */}
-                          <p className="hidden md:block text-gray-400 mb-3 truncate">
-                            {displayDescription || "No description."}
-                          </p>
-
-                          {/* CATEGORIES — hidden on mobile */}
-                          <div className="hidden md:flex gap-2 flex-wrap mb-4">
-                            {displayCategories.map((cat) => (
-                              <span
-                                key={cat}
-                                className="text-xs px-2 py-1 bg-teal-500/20 text-teal-400 border border-teal-500 rounded"
-                              >
-                                {cat}
-                              </span>
-                            ))}
-                          </div>
-
-                          {/* AUTHOR & DATE */}
-                          <div className="flex flex-wrap gap-2 md:gap-4 text-xs md:text-sm text-gray-500 mb-3 md:mb-4">
-                            <span>
-                              By:{" "}
-                              <strong className="text-teal-400">
-                                {blog.author.username}
-                              </strong>
-                            </span>
-                            <span>
-                              {new Date(blog.createdAt).toLocaleDateString(
-                                "en-IN",
-                                {
-                                  day: "2-digit",
-                                  month: "short",
-                                  year: "numeric",
-                                },
+                        {/* MOBILE ROW */}
+                        <div className="flex flex-col gap-4 p-4 sm:p-5 border-b border-white/5 lg:hidden">
+                          <div className="flex gap-3 sm:gap-4">
+                            <div className="w-20 h-20 sm:w-24 sm:h-24 shrink-0 rounded-[12px] overflow-hidden bg-[#06080d] border border-white/5">
+                              {displayCoverImage ? (
+                                <img
+                                  src={displayCoverImage}
+                                  alt={displayTitle}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center">
+                                  <FileText className="w-8 h-8 text-white/10" />
+                                </div>
                               )}
-                            </span>
+                            </div>
+                            <div className="flex-1 flex flex-col min-w-0 pt-0.5">
+                              <h2 className="text-[0.95rem] sm:text-[1.05rem] font-semibold text-white/90 line-clamp-2 leading-tight mb-1">
+                                {displayTitle || "Untitled"}
+                              </h2>
+                              <p className="text-[0.75rem] sm:text-[0.8rem] text-white/40 line-clamp-2 leading-relaxed">
+                                {displayDescription ||
+                                  "No description provided."}
+                              </p>
+                            </div>
+                            <div className="flex flex-col gap-2 shrink-0 justify-start">
+                              <ActionButtons />
+                            </div>
                           </div>
 
-                          {/* ACTION BUTTONS */}
-                          <div className="flex flex-wrap gap-2">
-                            {/* Admin direct delete — only on Manage tab */}
-                            {activeTab === "manage" && (
-                              <button
-                                onClick={(e) => deleteBlog(e, blog._id)}
-                                className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 md:px-4 md:py-2 text-xs md:text-sm rounded transition"
-                              >
-                                Delete
-                              </button>
-                            )}
-
-                            {activeTab === "pending" && (
-                              <>
-                                <button
-                                  onClick={(e) => handleApprove(e, blog._id)}
-                                  className="bg-green-600 hover:bg-green-500 text-white px-3 py-1.5 md:px-4 md:py-2 text-xs md:text-sm rounded transition"
-                                >
-                                  Approve
-                                </button>
-                                <button
-                                  onClick={(e) => handleReject(e, blog._id)}
-                                  className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 md:px-4 md:py-2 text-xs md:text-sm rounded transition"
-                                >
-                                  Reject
-                                </button>
-                              </>
-                            )}
-
-                            {/* Both approve and reject deletion buttons */}
-                            {activeTab === "deletion" && (
-                              <>
-                                <button
-                                  onClick={(e) =>
-                                    handleApproveDelete(e, blog._id)
-                                  }
-                                  className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 md:px-4 md:py-2 text-xs md:text-sm rounded transition"
-                                >
-                                  Approve
-                                </button>
-                                <button
-                                  onClick={(e) =>
-                                    handleRejectDelete(e, blog._id)
-                                  }
-                                  className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1.5 md:px-4 md:py-2 text-xs md:text-sm rounded transition"
-                                >
-                                  Reject
-                                </button>
-                              </>
-                            )}
-
-                            {activeTab === "edits" && (
-                              <>
-                                <button
-                                  onClick={(e) =>
-                                    handleApproveEdit(e, blog._id)
-                                  }
-                                  className="bg-green-600 hover:bg-green-500 text-white px-3 py-1.5 md:px-4 md:py-2 text-xs md:text-sm rounded transition"
-                                >
-                                  Approve
-                                </button>
-                                <button
-                                  onClick={(e) => handleRejectEdit(e, blog._id)}
-                                  className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 md:px-4 md:py-2 text-xs md:text-sm rounded transition"
-                                >
-                                  Reject
-                                </button>
-                              </>
-                            )}
+                          <div className="flex items-center justify-between pt-3 border-t border-white/5">
+                            <div className="flex items-center gap-2">
+                              <div className="flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-full bg-teal-500/10 border border-teal-500/20 text-teal-400 text-[0.6rem] sm:text-[0.65rem] font-bold">
+                                {authorInitials}
+                              </div>
+                              <span className="text-[0.75rem] sm:text-[0.8rem] text-white/80 max-w-[80px] sm:max-w-[120px] truncate">
+                                {blog.author.username}
+                              </span>
+                            </div>
+                            <div className="scale-90 sm:scale-100 origin-right">
+                              {getStatusBadge(blog.status, activeTab)}
+                            </div>
+                            <div className="flex flex-col text-right">
+                              <span className="text-[0.75rem] sm:text-[0.8rem] text-white/60">
+                                {date}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </motion.div>
-                  );
-                })}
-              </div>
-            )}
-          </motion.div>
-        </AnimatePresence>
-      </div>
-    </motion.div>
+                    );
+                  })}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+      </motion.div>
+    </>
   );
 }
