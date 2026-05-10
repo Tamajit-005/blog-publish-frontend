@@ -1,5 +1,5 @@
 // ⚠️ Keep in sync with Strapi categories collection
-// Last synced: March 2026
+// Last synced: May 2026
 
 export const FIXED_CATEGORIES = [
   { id: 1, name: "Gaming",        slug: "gaming",        documentId: "zxhivhcsvvo4bwsv8lrijpop" },
