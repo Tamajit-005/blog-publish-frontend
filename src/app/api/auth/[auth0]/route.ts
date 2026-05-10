@@ -87,7 +87,8 @@ async function afterCallback(req: NextRequest, session: Session, state: any) {
   return session;
 }
 
-export const GET = handleAuth({
+// Create the Auth0 handler
+const authHandler = handleAuth({
   login: handleLogin((req) => {
     // Safely parse the URL to preserve returnTo behavior
     const url = req.url ? new URL(req.url) : null;
@@ -99,3 +100,12 @@ export const GET = handleAuth({
   }),
   callback: handleCallback({ afterCallback }),
 });
+
+// Wrap the handler to await params for Next.js 15 compatibility
+export async function GET(
+  request: NextRequest,
+  props: { params: Promise<{ auth0: string }> }
+) {
+  const params = await props.params;
+  return authHandler(request, { params } as any);
+}

@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Home, BookOpen, Info, Mail } from "lucide-react";
+import { Home, BookOpen, Info, Mail, Clock } from "lucide-react";
 
 const Navbar = () => {
   const [profileOpen, setProfileOpen] = useState(false);
@@ -74,6 +74,10 @@ const Navbar = () => {
     { href: "/about", label: "About", icon: Info },
     { href: "/contact", label: "Contact", icon: Mail },
   ];
+
+  if (user?.role && ["admin", "superadmin"].includes(user.role)) {
+    navLinks.push({ href: "/admin/blogs", label: "Pending", icon: Clock });
+  }
 
   return (
     <>

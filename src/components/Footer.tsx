@@ -1,3 +1,6 @@
+"use client";
+
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { FaTwitter, FaGithub, FaInstagram } from "react-icons/fa";
@@ -13,9 +16,28 @@ import {
   Zap,
   Globe,
   Heart,
+  Clock,
 } from "lucide-react";
 
 export default function Footer() {
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/user/username")
+      .then((res) => {
+        if (!res.ok) throw new Error("Not authenticated");
+        return res.json();
+      })
+      .then((data) => {
+        if (data?.role === "admin" || data?.role === "superadmin") {
+          setIsAdmin(true);
+        }
+      })
+      .catch(() => {
+        setIsAdmin(false);
+      });
+  }, []);
+
   return (
     <footer className="relative z-10 border-t border-white/[0.08] bg-[#02050a] pt-12 text-gray-300">
       <div className="mx-auto max-w-[1280px] px-6 lg:px-8">
@@ -186,6 +208,27 @@ export default function Footer() {
                   </p>
                 </div>
               </li>
+
+              {isAdmin && (
+                <li className="flex items-start gap-4">
+                  <div>
+                    <Link
+                      href="/admin/blogs"
+                      className="group flex items-center gap-4 text-[16px] font-medium text-gray-200 transition hover:text-teal-300"
+                    >
+                      <Clock
+                        size={20}
+                        className="mt-0.5 text-teal-400 shrink-0"
+                      />
+                      Pending Approvals
+                    </Link>
+                    <p className="mt-1 pl-9 text-[14px] text-gray-400">
+                      Review and approve submissions
+                    </p>
+                  </div>
+                </li>
+              )}
+
               <li className="flex items-start gap-4">
                 {/* <ShieldCheck
                   size={20}

@@ -175,7 +175,8 @@ export default function HomePage() {
         </div>
 
         <div className="relative z-10 mx-auto flex min-h-screen max-w-7xl items-center px-6">
-          <div className="max-w-2xl">
+          {/* ADDED: md:pt-24 to push the content down on desktop and clear the absolute navbar */}
+          <div className="max-w-2xl md:pt-24">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{

@@ -32,29 +32,29 @@ function ValidationWarning({ message }: { message: string }) {
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -8, scale: 0.97 }}
       transition={{ duration: 0.35, ease: "easeOut" }}
-      className="mt-2 flex items-start gap-2 bg-[#fff8e7] border border-[#f0c040] text-[#333] text-sm px-3 py-2 rounded shadow-md"
+      className="mt-2 flex items-start gap-2 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-200"
     >
-      <span className="text-base leading-none mt-0.5">⚠️</span>
+      <span className="mt-0.5 shrink-0 text-sm leading-none">⚠️</span>
       <span>{message}</span>
     </motion.div>
   );
 }
 
-// Shows remaining characters; warns when near or at the limit
 function CharCount({ current, max }: { current: number; max: number }) {
-  const remaining = max - current;
-  if (current === 0) return null;
-  const color =
-    remaining === 0
-      ? "text-red-400"
-      : remaining <= 20
-        ? "text-yellow-400"
-        : "text-gray-400";
+  const nearLimit = current >= max - 20;
+  const atLimit = current >= max;
+
   return (
-    <p className={`text-xs mt-1 text-right ${color}`}>
-      {remaining === 0
-        ? `Character limit reached (${max}/${max})`
-        : `${current}/${max}`}
+    <p
+      className={`mt-1 text-right text-xs transition-colors ${
+        atLimit
+          ? "text-red-400"
+          : nearLimit
+            ? "text-yellow-400"
+            : "text-gray-500"
+      }`}
+    >
+      {current}/{max}
     </p>
   );
 }
@@ -72,30 +72,30 @@ function SuccessModal({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.2 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
     >
       <motion.div
         initial={{ opacity: 0, scale: 0.92, y: 16 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.92, y: 16 }}
         transition={{ duration: 0.25, ease: "easeOut" }}
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden"
+        className="mx-4 w-full max-w-sm overflow-hidden rounded-2xl border border-white/10 bg-[#0f1623] shadow-2xl"
       >
-        <div className="px-5 pt-5 pb-3 border-b border-gray-200">
-          <p className="font-bold text-gray-900 text-base">
+        <div className="border-b border-white/10 px-5 pb-3 pt-5">
+          <p className="text-sm font-semibold text-gray-200">
             {typeof window !== "undefined"
               ? window.location.host
-              : "localhost:3000"}{" "}
+              : "palettepublisher.com"}{" "}
             says
           </p>
         </div>
         <div className="px-5 py-4">
-          <p className="text-gray-700 text-sm leading-relaxed">{message}</p>
+          <p className="text-sm leading-relaxed text-gray-400">{message}</p>
         </div>
-        <div className="px-5 pb-5 flex justify-end gap-3">
+        <div className="flex justify-end px-5 pb-5">
           <button
             onClick={onOk}
-            className="px-6 py-1.5 rounded-full bg-teal-700 hover:bg-teal-600 text-white text-sm font-medium transition"
+            className="rounded-full bg-teal-500 px-6 py-1.5 text-sm font-semibold text-gray-900 transition hover:bg-teal-400"
           >
             OK
           </button>
@@ -103,6 +103,31 @@ function SuccessModal({
       </motion.div>
     </motion.div>
   );
+}
+
+function ToolbarButton({
+  onClick,
+  title,
+  children,
+}: {
+  onClick: () => void;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-gray-400 transition hover:bg-white/10 hover:text-gray-100"
+    >
+      {children}
+    </button>
+  );
+}
+
+function ToolbarDivider() {
+  return <div className="mx-1 h-4 w-px shrink-0 bg-white/10" />;
 }
 
 interface Category {
@@ -141,7 +166,6 @@ export default function EditBlogPage() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  // ── Image-specific validation warnings ──────────────────────────
   const [coverImageError, setCoverImageError] = useState<string | null>(null);
   const [inlineImageError, setInlineImageError] = useState<string | null>(null);
 
@@ -194,6 +218,13 @@ export default function EditBlogPage() {
     }
   }, [id, router]);
 
+  useEffect(() => {
+    setInlineImages((prev) => {
+      const next = prev.filter((img) => content.includes(img.placeholder));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [content]);
+
   function injectFilenameToDataUrl(dataUrl: string, filename: string) {
     const safe = encodeURIComponent(filename);
     return dataUrl.replace(
@@ -217,7 +248,6 @@ export default function EditBlogPage() {
       return;
     }
 
-    // Clear any previous error on successful pick
     setCoverImageError(null);
 
     const reader = new FileReader();
@@ -246,7 +276,6 @@ export default function EditBlogPage() {
       return;
     }
 
-    // Clear any previous error on successful pick
     setInlineImageError(null);
 
     const reader = new FileReader();
@@ -264,7 +293,7 @@ export default function EditBlogPage() {
       const newImage: InlineImage = {
         id: imageId,
         base64: base64WithName,
-        placeholder: placeholder,
+        placeholder,
       };
       setInlineImages((prev) => [...prev, newImage]);
 
@@ -352,8 +381,9 @@ export default function EditBlogPage() {
       getCategoryError() ||
       getSlugError() ||
       getContentError()
-    )
+    ) {
       return;
+    }
 
     setSubmitting(true);
     setMessage(null);
@@ -413,6 +443,7 @@ export default function EditBlogPage() {
       selectedText === ""
         ? selStart + start.length
         : selStart + wrappedText.length;
+
     el.selectionStart = el.selectionEnd = cursorPos;
     el.focus();
   }
@@ -478,6 +509,7 @@ export default function EditBlogPage() {
         el.selectionStart = el.selectionEnd = lineStart;
         return;
       }
+
       e.preventDefault();
       insertTextAtCursor(el, `\n${indent}- `, 0);
       setContent(el.value);
@@ -496,6 +528,7 @@ export default function EditBlogPage() {
         el.selectionStart = el.selectionEnd = lineStart;
         return;
       }
+
       e.preventDefault();
       const nextNum = parseInt(num) + 1;
       insertTextAtCursor(el, `\n${indent}${nextNum}. `, 0);
@@ -504,20 +537,175 @@ export default function EditBlogPage() {
     }
   }
 
-  const getCategoryName = (slug: string) =>
-    categories.find((c) => c.slug === slug)?.name || slug;
+  function toggleCategory(slug: string) {
+    if (selectedCategories.includes(slug)) {
+      setSelectedCategories(selectedCategories.filter((c) => c !== slug));
+    } else if (selectedCategories.length < 3) {
+      setSelectedCategories([...selectedCategories, slug]);
+    }
+  }
 
-  const availableCategories = categories.filter(
-    (cat) => !selectedCategories.includes(cat.slug),
-  );
-
-  if (loading) {
+  function renderCoverImageSection(inputId: string, className = "") {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-teal-400">
-        Loading...
+      <div
+        className={`rounded-2xl border border-white/10 bg-white/[0.04] p-5 ${className}`}
+      >
+        <label className="mb-3 block text-xs font-semibold uppercase tracking-wider text-gray-400">
+          Cover Image
+        </label>
+
+        {!imagePreview ? (
+          <>
+            <label
+              htmlFor={inputId}
+              className="group flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-white/10 p-6 text-center transition hover:border-teal-500/40"
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 transition group-hover:bg-teal-500/10">
+                <svg
+                  className="h-5 w-5 text-gray-500 transition group-hover:text-teal-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                  />
+                </svg>
+              </div>
+              <span className="text-xs text-gray-400">
+                <span className="font-medium text-teal-400">
+                  Upload Cover Image
+                </span>
+                <br />
+                <span className="text-gray-500">Click to browse</span>
+              </span>
+              <span className="text-xs text-gray-600">
+                Recommended: 1200 × 630px <br /> (Max 400 KB)
+              </span>
+            </label>
+
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleImageUpload}
+              className="hidden"
+              id={inputId}
+            />
+          </>
+        ) : (
+          <div className="relative overflow-hidden rounded-xl">
+            <img
+              src={imagePreview}
+              alt="Cover preview"
+              className="aspect-video w-full object-cover"
+            />
+            <button
+              type="button"
+              onClick={clearImage}
+              className="absolute right-2 top-2 rounded-lg bg-black/60 p-1.5 text-white transition hover:bg-red-600"
+              title="Remove image"
+            >
+              <svg
+                className="h-3.5 w-3.5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          </div>
+        )}
+
+        <AnimatePresence>
+          {coverImageError && (
+            <ValidationWarning
+              key={`${inputId}-cover-img-err`}
+              message={coverImageError}
+            />
+          )}
+        </AnimatePresence>
       </div>
     );
   }
+
+  function renderInlineImageSection(inputId: string, className = "") {
+    return (
+      <div
+        className={`rounded-2xl border border-white/10 bg-white/[0.04] p-5 ${className}`}
+      >
+        <label className="mb-3 block text-xs font-semibold uppercase tracking-wider text-gray-400">
+          Inline Images
+        </label>
+
+        <label
+          htmlFor={inputId}
+          className="group flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-white/10 p-5 text-center transition hover:border-teal-500/40"
+        >
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 transition group-hover:bg-teal-500/10">
+            <svg
+              className="h-5 w-5 text-gray-500 transition group-hover:text-teal-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+              />
+            </svg>
+          </div>
+          <span className="text-xs text-gray-400">
+            <span className="font-medium text-teal-400">
+              Upload Inline Images
+            </span>
+            <br />
+            <span className="text-gray-500">Insert images into content</span>
+          </span>
+          <span className="text-xs text-gray-600">Max 400 KB each</span>
+        </label>
+
+        <input
+          id={inputId}
+          type="file"
+          accept="image/*"
+          onChange={handleInlineImageUpload}
+          className="hidden"
+        />
+
+        {inlineImages.length > 0 && (
+          <button
+            type="button"
+            onClick={openInlineImagePicker}
+            className="mt-3 w-full rounded-lg border border-teal-500/30 py-2 text-xs font-medium text-teal-400 transition hover:bg-teal-500/10"
+          >
+            Select More Images
+          </button>
+        )}
+
+        <AnimatePresence>
+          {inlineImageError && (
+            <ValidationWarning
+              key={`${inputId}-inline-img-err`}
+              message={inlineImageError}
+            />
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  }
+
+  if (loading) return null;
 
   return (
     <>
@@ -533,422 +721,241 @@ export default function EditBlogPage() {
         )}
       </AnimatePresence>
 
-      <motion.main
-        initial={{ opacity: 0, y: 40 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
-        className="min-h-screen bg-slate-950 text-gray-100 px-6 py-12"
-      >
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-4xl font-bold text-teal-400 mb-6">Edit Blog</h1>
+      <main className="relative isolate min-h-screen text-gray-100">
+        <div className="pointer-events-none fixed inset-0 z-0 bg-[#02050a]" />
+        <div className="pointer-events-none fixed inset-0 z-0 bg-cover bg-top bg-no-repeat opacity-30" />
 
-          <div className="bg-blue-500/10 border border-blue-500 text-blue-300 p-4 rounded-md mb-6">
-            <p className="text-sm">
-              ℹ️ If this blog is already published, your edits will be submitted
-              for admin review before replacing the live version.
-            </p>
-          </div>
-
-          {message && (
-            <div className="mb-4 p-3 rounded-md text-center bg-red-500/20 border border-red-500 text-red-300">
-              {message}
-            </div>
-          )}
-
-          <form
-            onSubmit={handleSubmit}
-            noValidate
-            className="flex flex-col gap-4 bg-gray-900 p-6 rounded-xl border border-gray-800"
-          >
-            {/* Title */}
-            <div ref={titleRef}>
-              <label className="block text-sm text-gray-400 mb-2">
-                Title <span className="text-red-500">*</span>
-              </label>
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Your blog title"
-                maxLength={200}
-                className="w-full p-3 rounded-md bg-gray-800 border border-gray-700 focus:border-teal-400 outline-none"
-              />
-              {/* Live character counter — warns at 180+, red at 200 */}
-              <CharCount current={title.length} max={200} />
-              <AnimatePresence>
-                {showErrors && getTitleError() && (
-                  <ValidationWarning
-                    key="title-err"
-                    message={getTitleError()!}
-                  />
-                )}
-              </AnimatePresence>
-            </div>
-
-            {/* Description */}
-            <div ref={descriptionRef}>
-              <label className="block text-sm text-gray-400 mb-2">
-                Description <span className="text-red-500">*</span>
-              </label>
-              <input
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Short description (10-300 characters)"
-                maxLength={300}
-                className="w-full p-3 rounded-md bg-gray-800 border border-gray-700 focus:border-teal-400 outline-none"
-              />
-              {/* Live character counter — warns at 280+, red at 300 */}
-              <CharCount current={description.length} max={300} />
-              <AnimatePresence>
-                {showErrors && getDescriptionError() && (
-                  <ValidationWarning
-                    key="desc-err"
-                    message={getDescriptionError()!}
-                  />
-                )}
-              </AnimatePresence>
-            </div>
-
-            {/* Categories */}
-            <div ref={categoryRef}>
-              <label className="block text-sm text-gray-400 mb-2">
-                category ({selectedCategories.length})
-              </label>
-
-              {selectedCategories.length < 3 && (
-                <select
-                  value=""
-                  onChange={(e) => {
-                    if (e.target.value && selectedCategories.length < 3) {
-                      setSelectedCategories([
-                        ...selectedCategories,
-                        e.target.value,
-                      ]);
-                    }
-                  }}
-                  className="w-full p-3 rounded-md bg-gray-800 border border-gray-700 focus:border-teal-400 outline-none mb-3"
-                  disabled={
-                    loadingCategories || availableCategories.length === 0
-                  }
+        <motion.div
+          initial={{ opacity: 0, y: 32 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.55, ease: "easeOut" }}
+          className="relative z-10 px-4 pb-28 pt-36 sm:px-6 sm:pb-12 sm:pt-40 lg:pt-32"
+        >
+          <div className="mx-auto max-w-5xl">
+            <div className="mb-8 flex items-center gap-4">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-teal-500/30 bg-teal-500/15">
+                <svg
+                  className="h-5 w-5 text-teal-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
                 >
-                  <option value="">Add or create a relation</option>
-                  {availableCategories.map((cat) => (
-                    <option key={cat.id} value={cat.slug}>
-                      {cat.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              <div className="space-y-2">
-                {selectedCategories.map((catSlug) => (
-                  <div
-                    key={catSlug}
-                    className="flex items-center justify-between p-3 bg-gray-800 border border-gray-700 rounded-md group hover:border-teal-500 transition"
-                  >
-                    <div className="flex items-center gap-3">
-                      <svg
-                        className="w-4 h-4 text-gray-500"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M4 6h16M4 12h16M4 18h16"
-                        />
-                      </svg>
-                      <span className="text-gray-200">
-                        {getCategoryName(catSlug)}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setSelectedCategories(
-                          selectedCategories.filter((c) => c !== catSlug),
-                        )
-                      }
-                      className="text-gray-500 hover:text-red-400 transition"
-                    >
-                      <svg
-                        className="w-5 h-5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M6 18L18 6M6 6l12 12"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-                ))}
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                  />
+                </svg>
               </div>
 
-              <p className="text-xs text-gray-500 mt-2">
-                {selectedCategories.length === 0 &&
-                  "Select at least 1 category"}
-                {selectedCategories.length > 0 &&
-                  selectedCategories.length < 3 &&
-                  `You can select ${3 - selectedCategories.length} more`}
-                {selectedCategories.length === 3 &&
-                  "Maximum 3 categories selected"}
-              </p>
-              <AnimatePresence>
-                {showErrors && getCategoryError() && (
-                  <ValidationWarning
-                    key="cat-err"
-                    message={getCategoryError()!}
-                  />
-                )}
-              </AnimatePresence>
+              <div>
+                <h1 className="text-2xl font-bold leading-tight text-white sm:text-3xl">
+                  Edit Blog
+                </h1>
+                <p className="mt-0.5 text-sm text-gray-400">
+                  Update your ideas, stories, and knowledge with the world.
+                </p>
+              </div>
             </div>
 
-            {/* Slug */}
-            <div ref={slugRef}>
-              <label className="block text-sm text-gray-400 mb-2">
-                Slug <span className="text-red-500">*</span>
-              </label>
-              <input
-                value={slug}
-                onChange={(e) => setSlug(e.target.value)}
-                placeholder="my-blog-post (URL-friendly, lowercase, no spaces)"
-                required
-                pattern="[a-z0-9-]+"
-                className="w-full p-3 rounded-md bg-gray-800 border border-gray-700 focus:border-teal-400 outline-none"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Used in URL: yoursite.com/blog/
-                <strong>{slug || "slug"}</strong>
-              </p>
-              <AnimatePresence>
-                {showErrors && getSlugError() && (
-                  <ValidationWarning key="slug-err" message={getSlugError()!} />
-                )}
-              </AnimatePresence>
+            <div className="mb-6 flex items-start gap-3 rounded-xl border border-blue-500/25 bg-blue-500/8 px-4 py-3 text-sm text-blue-300">
+              <svg
+                className="mt-0.5 h-4 w-4 shrink-0 text-blue-400"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              <span>
+                If this blog is already published, your edits will be submitted
+                for admin review before replacing the live version.
+              </span>
             </div>
 
-            {/* Cover Image Upload */}
-            <div>
-              <label className="block text-sm text-gray-400 mb-2">
-                Cover Image (Optional)
-              </label>
+            {message && (
+              <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-center text-sm text-red-300">
+                {message}
+              </div>
+            )}
 
-              {!imagePreview ? (
-                <div className="border-2 border-dashed border-gray-700 rounded-md p-6 text-center hover:border-teal-500 transition">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                    className="hidden"
-                    id="cover-image-upload"
-                  />
-                  <label
-                    htmlFor="cover-image-upload"
-                    className="cursor-pointer flex flex-col items-center"
-                  >
-                    <svg
-                      className="w-12 h-12 text-gray-600 mb-3"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                      />
-                    </svg>
-                    <span className="text-sm text-gray-400">
-                      Click to upload cover image
-                    </span>
-                    <span className="text-xs text-gray-600 mt-1">
-                      Max size: 400KB
+            <form
+              onSubmit={handleSubmit}
+              noValidate
+              className="flex flex-col gap-5 lg:flex-row"
+            >
+              <div className="flex min-w-0 flex-1 flex-col gap-4">
+                <div
+                  ref={titleRef}
+                  className="rounded-2xl border border-white/10 bg-white/[0.04] p-5"
+                >
+                  <label className="mb-3 block text-xs font-semibold uppercase tracking-wider text-gray-400">
+                    Blog Title{" "}
+                    <span className="normal-case font-normal tracking-normal text-red-400">
+                      *
                     </span>
                   </label>
-                </div>
-              ) : (
-                <div className="relative">
-                  <img
-                    src={imagePreview}
-                    alt="Cover preview"
-                    className="w-full h-64 object-cover rounded-md"
+                  <input
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Enter an engaging title for your blog..."
+                    maxLength={200}
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-500 focus:border-teal-500/60 focus:bg-white/[0.07]"
                   />
-                  <button
-                    type="button"
-                    onClick={clearImage}
-                    className="absolute top-2 right-2 bg-red-600 hover:bg-red-500 text-white p-2 rounded-full transition"
-                    title="Remove image"
-                  >
-                    <svg
-                      className="w-5 h-5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M6 18L18 6M6 6l12 12"
+                  <CharCount current={title.length} max={200} />
+                  <AnimatePresence>
+                    {showErrors && getTitleError() && (
+                      <ValidationWarning
+                        key="title-err"
+                        message={getTitleError()!}
                       />
-                    </svg>
-                  </button>
+                    )}
+                  </AnimatePresence>
                 </div>
-              )}
 
-              {/* ── Cover image warning ── */}
-              <AnimatePresence>
-                {coverImageError && (
-                  <ValidationWarning
-                    key="cover-img-err"
-                    message={coverImageError}
+                <div
+                  ref={slugRef}
+                  className="rounded-2xl border border-white/10 bg-white/[0.04] p-5"
+                >
+                  <label className="mb-3 block text-xs font-semibold uppercase tracking-wider text-gray-400">
+                    Slug{" "}
+                    <span className="normal-case font-normal tracking-normal text-red-400">
+                      *
+                    </span>
+                  </label>
+                  <input
+                    value={slug}
+                    onChange={(e) => setSlug(e.target.value)}
+                    placeholder="your-blog-slug"
+                    required
+                    pattern="[a-z0-9-]+"
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-500 focus:border-teal-500/60 focus:bg-white/[0.07]"
                   />
-                )}
-              </AnimatePresence>
-            </div>
+                  <p className="mt-2 text-xs text-gray-500">
+                    This will be your blog&apos;s unique URL slug
+                  </p>
+                  <AnimatePresence>
+                    {showErrors && getSlugError() && (
+                      <ValidationWarning
+                        key="slug-err"
+                        message={getSlugError()!}
+                      />
+                    )}
+                  </AnimatePresence>
+                </div>
 
-            {/* Markdown Editor */}
-            <div ref={contentRef}>
-              <label className="block text-sm text-gray-400 mb-2">
-                Content <span className="text-red-500">*</span>
-              </label>
+                <div
+                  ref={descriptionRef}
+                  className="rounded-2xl border border-white/10 bg-white/[0.04] p-5"
+                >
+                  <label className="mb-3 block text-xs font-semibold uppercase tracking-wider text-gray-400">
+                    Description{" "}
+                    <span className="normal-case font-normal tracking-normal text-red-400">
+                      *
+                    </span>
+                  </label>
+                  <textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Write a short description about your blog..."
+                    maxLength={300}
+                    rows={3}
+                    className="w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-500 focus:border-teal-500/60 focus:bg-white/[0.07]"
+                  />
+                  <CharCount current={description.length} max={300} />
+                  <AnimatePresence>
+                    {showErrors && getDescriptionError() && (
+                      <ValidationWarning
+                        key="desc-err"
+                        message={getDescriptionError()!}
+                      />
+                    )}
+                  </AnimatePresence>
+                </div>
 
-              {inlineImages.filter((img) => content.includes(img.placeholder))
-                .length > 0 && (
-                <div className="mb-2 text-xs text-gray-500">
-                  📷{" "}
-                  {
-                    inlineImages.filter((img) =>
-                      content.includes(img.placeholder),
-                    ).length
-                  }{" "}
-                  inline image
+                <div
+                  ref={categoryRef}
+                  className="rounded-2xl border border-white/10 bg-white/[0.04] p-5"
+                >
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400">
+                      Categories{" "}
+                      <span className="normal-case font-normal tracking-normal text-red-400">
+                        *
+                      </span>
+                    </label>
+                    <span className="text-xs text-gray-500">
+                      {selectedCategories.length === 3
+                        ? "Max 3 selected"
+                        : `${selectedCategories.length}/3 selected`}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 min-[520px]:grid-cols-3 lg:flex lg:flex-wrap">
+                    {categories.map((cat) => {
+                      const isSelected = selectedCategories.includes(cat.slug);
+                      const isDisabled =
+                        !isSelected && selectedCategories.length >= 3;
+
+                      return (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => toggleCategory(cat.slug)}
+                          disabled={isDisabled}
+                          className={`rounded-xl border px-4 py-3 text-xs font-medium transition lg:rounded-full lg:py-2 ${
+                            isSelected
+                              ? "border-teal-500/60 bg-teal-500/20 text-teal-300"
+                              : isDisabled
+                                ? "cursor-not-allowed border-white/5 bg-white/[0.02] text-gray-600"
+                                : "border-white/10 bg-white/[0.04] text-gray-300 hover:border-white/20 hover:text-gray-100"
+                          }`}
+                        >
+                          {cat.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <AnimatePresence>
+                    {showErrors && getCategoryError() && (
+                      <ValidationWarning
+                        key="cat-err"
+                        message={getCategoryError()!}
+                      />
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                <div className="lg:hidden">
+                  {renderCoverImageSection("cover-image-upload-mobile")}
+                </div>
+
+                <div className="lg:hidden">
+                  {renderInlineImageSection("inline-image-trigger-mobile")}
+                </div>
+
+                <div
+                  ref={contentRef}
+                  className="rounded-2xl border border-white/10 bg-white/[0.04] p-5"
+                >
+                  <label className="mb-3 block text-xs font-semibold uppercase tracking-wider text-gray-400">
+                    Content{" "}
+                    <span className="normal-case font-normal tracking-normal text-red-400">
+                      *
+                    </span>
+                  </label>
+
                   {inlineImages.filter((img) =>
                     content.includes(img.placeholder),
-                  ).length !== 1
-                    ? "s"
-                    : ""}{" "}
-                  added
-                </div>
-              )}
-
-              {/* Toolbar */}
-              <div className="bg-slate-900 border border-gray-800 rounded-md">
-                <div className="overflow-x-auto [&::-webkit-scrollbar]:hidden border-b border-gray-800">
-                  <div className="flex items-center gap-1 p-2 text-sm min-w-max md:min-w-0 md:flex-wrap">
-                    <button
-                      onClick={() => wrapSelection("**", "**")}
-                      type="button"
-                      className="px-3 py-1.5 rounded hover:bg-slate-700 font-bold shrink-0"
-                    >
-                      B
-                    </button>
-                    <button
-                      onClick={() => wrapSelection("_", "_")}
-                      type="button"
-                      className="px-3 py-1.5 rounded hover:bg-slate-700 italic shrink-0"
-                    >
-                      I
-                    </button>
-                    <button
-                      onClick={() => wrapSelection("<u>", "</u>")}
-                      type="button"
-                      className="px-3 py-1.5 rounded hover:bg-slate-700 underline shrink-0"
-                    >
-                      U
-                    </button>
-                    <button
-                      onClick={() => wrapSelection("~~", "~~")}
-                      type="button"
-                      className="px-3 py-1.5 rounded hover:bg-slate-700 line-through shrink-0"
-                    >
-                      S
-                    </button>
-
-                    <div className="w-px h-5 bg-gray-700 mx-1 shrink-0" />
-
-                    <button
-                      onClick={() => handleHeading(1)}
-                      type="button"
-                      className="px-3 py-1.5 rounded hover:bg-slate-700 shrink-0"
-                    >
-                      H1
-                    </button>
-                    <button
-                      onClick={() => handleHeading(2)}
-                      type="button"
-                      className="px-3 py-1.5 rounded hover:bg-slate-700 shrink-0"
-                    >
-                      H2
-                    </button>
-                    <button
-                      onClick={() => handleHeading(3)}
-                      type="button"
-                      className="px-3 py-1.5 rounded hover:bg-slate-700 shrink-0"
-                    >
-                      H3
-                    </button>
-                    <button
-                      onClick={() => handleHeading(4)}
-                      type="button"
-                      className="px-3 py-1.5 rounded hover:bg-slate-700 shrink-0"
-                    >
-                      H4
-                    </button>
-
-                    <div className="w-px h-5 bg-gray-700 mx-1 shrink-0" />
-
-                    <button
-                      onClick={insertBulletList}
-                      type="button"
-                      title="Bulleted list"
-                      className="px-3 py-1.5 rounded hover:bg-slate-700 shrink-0"
-                    >
-                      •
-                    </button>
-                    <button
-                      onClick={insertNumberedList}
-                      type="button"
-                      title="Numbered list"
-                      className="px-3 py-1.5 rounded hover:bg-slate-700 shrink-0"
-                    >
-                      1.
-                    </button>
-
-                    <div className="w-px h-5 bg-gray-700 mx-1 shrink-0" />
-
-                    <button
-                      onClick={() => wrapSelection("> ")}
-                      type="button"
-                      className="px-3 py-1.5 rounded hover:bg-slate-700 shrink-0"
-                    >
-                      Quote
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => wrapSelection("```\n", "\n```")}
-                      className="px-3 py-1.5 rounded hover:bg-slate-700 shrink-0"
-                    >
-                      Code
-                    </button>
-
-                    <div className="w-px h-5 bg-gray-700 mx-1 shrink-0" />
-
-                    <button
-                      type="button"
-                      onClick={openInlineImagePicker}
-                      title="Insert image"
-                      className="px-3 py-1.5 rounded hover:bg-slate-700 flex items-center gap-1 shrink-0"
-                    >
+                  ).length > 0 && (
+                    <div className="mb-3 flex items-center gap-2 rounded-lg border border-teal-500/20 bg-teal-500/8 px-3 py-2 text-xs text-teal-300/90">
                       <svg
-                        className="w-4 h-4"
+                        className="h-3.5 w-3.5 shrink-0"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -960,68 +967,326 @@ export default function EditBlogPage() {
                           d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
                         />
                       </svg>
-                      Image
-                    </button>
+                      <span>
+                        {
+                          inlineImages.filter((img) =>
+                            content.includes(img.placeholder),
+                          ).length
+                        }{" "}
+                        inline image
+                        {inlineImages.filter((img) =>
+                          content.includes(img.placeholder),
+                        ).length !== 1
+                          ? "s"
+                          : ""}{" "}
+                        added
+                      </span>
+                    </div>
+                  )}
 
-                    <input
-                      ref={inlineImageInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleInlineImageUpload}
-                      className="hidden"
+                  <div className="overflow-hidden rounded-xl border border-white/10">
+                    <div className="overflow-x-auto border-b border-white/8 bg-white/[0.03] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                      <div className="flex min-w-max items-center gap-0.5 px-2 py-1.5">
+                        <ToolbarButton
+                          onClick={() => wrapSelection("**", "**")}
+                          title="Bold"
+                        >
+                          <span className="text-xs font-bold">B</span>
+                        </ToolbarButton>
+                        <ToolbarButton
+                          onClick={() => wrapSelection("_", "_")}
+                          title="Italic"
+                        >
+                          <span className="text-xs italic">I</span>
+                        </ToolbarButton>
+                        <ToolbarButton
+                          onClick={() => wrapSelection("<u>", "</u>")}
+                          title="Underline"
+                        >
+                          <span className="text-xs underline">U</span>
+                        </ToolbarButton>
+                        <ToolbarButton
+                          onClick={() => wrapSelection("~~", "~~")}
+                          title="Strikethrough"
+                        >
+                          <span className="text-xs line-through">S</span>
+                        </ToolbarButton>
+
+                        <ToolbarDivider />
+
+                        <ToolbarButton
+                          onClick={() => handleHeading(1)}
+                          title="Heading 1"
+                        >
+                          <span className="text-xs font-bold">H1</span>
+                        </ToolbarButton>
+                        <ToolbarButton
+                          onClick={() => handleHeading(2)}
+                          title="Heading 2"
+                        >
+                          <span className="text-xs font-bold">H2</span>
+                        </ToolbarButton>
+                        <ToolbarButton
+                          onClick={() => handleHeading(3)}
+                          title="Heading 3"
+                        >
+                          <span className="text-xs font-bold">H3</span>
+                        </ToolbarButton>
+                        <ToolbarButton
+                          onClick={() => handleHeading(4)}
+                          title="Heading 4"
+                        >
+                          <span className="text-xs font-bold">H4</span>
+                        </ToolbarButton>
+
+                        <ToolbarDivider />
+
+                        <ToolbarButton
+                          onClick={insertBulletList}
+                          title="Bullet list"
+                        >
+                          <svg
+                            className="h-3.5 w-3.5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"
+                            />
+                          </svg>
+                        </ToolbarButton>
+                        <ToolbarButton
+                          onClick={insertNumberedList}
+                          title="Numbered list"
+                        >
+                          <span className="text-[11px] font-semibold">1.</span>
+                        </ToolbarButton>
+
+                        <ToolbarDivider />
+
+                        <ToolbarButton
+                          onClick={() => wrapSelection("> ")}
+                          title="Blockquote"
+                        >
+                          <span className="text-sm font-semibold leading-none">
+                            “”
+                          </span>
+                        </ToolbarButton>
+                        <ToolbarButton
+                          onClick={() => wrapSelection("```\n", "\n```")}
+                          title="Code block"
+                        >
+                          <svg
+                            className="h-3.5 w-3.5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
+                            />
+                          </svg>
+                        </ToolbarButton>
+
+                        <ToolbarDivider />
+
+                        <ToolbarButton
+                          onClick={openInlineImagePicker}
+                          title="Insert inline image"
+                        >
+                          <svg
+                            className="h-3.5 w-3.5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                            />
+                          </svg>
+                        </ToolbarButton>
+
+                        <input
+                          ref={inlineImageInputRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handleInlineImageUpload}
+                          className="hidden"
+                        />
+                      </div>
+                    </div>
+
+                    <textarea
+                      ref={textareaRef}
+                      value={content}
+                      onChange={(e) => {
+                        const newContent = e.target.value;
+                        setContent(newContent);
+                        setInlineImages((prev) =>
+                          prev.filter((img) =>
+                            newContent.includes(img.placeholder),
+                          ),
+                        );
+                      }}
+                      onKeyDown={handleKeyDown}
+                      placeholder="Write your blog content here (minimum 100 characters)..."
+                      className="h-72 w-full resize-y bg-transparent p-4 font-mono text-sm leading-relaxed text-gray-200 outline-none placeholder:text-gray-600"
                     />
+
+                    <div className="flex justify-end gap-4 border-t border-white/8 bg-white/[0.02] px-4 py-2">
+                      <span className="text-xs text-gray-600">
+                        Words:{" "}
+                        {content.trim()
+                          ? content.trim().split(/\s+/).length
+                          : 0}
+                      </span>
+                      <span className="text-xs text-gray-600">
+                        Characters: {content.length}
+                      </span>
+                    </div>
                   </div>
+
+                  <p className="mt-2 text-xs text-gray-600">
+                    You can use Markdown formatting
+                  </p>
+
+                  <AnimatePresence>
+                    {inlineImageError && (
+                      <ValidationWarning
+                        key="inline-img-err"
+                        message={inlineImageError}
+                      />
+                    )}
+                  </AnimatePresence>
+
+                  <AnimatePresence>
+                    {showErrors && getContentError() && (
+                      <ValidationWarning
+                        key="content-err"
+                        message={getContentError()!}
+                      />
+                    )}
+                  </AnimatePresence>
                 </div>
 
-                <textarea
-                  ref={textareaRef}
-                  value={content}
-                  onChange={(e) => {
-                    const newContent = e.target.value;
-                    setContent(newContent);
-                    setInlineImages((prev) =>
-                      prev.filter((img) =>
-                        newContent.includes(img.placeholder),
-                      ),
-                    );
-                  }}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Write your blog content here (minimum 100 characters)..."
-                  className="w-full p-4 h-72 bg-slate-900 text-gray-100 resize-vertical rounded-b-md outline-none font-mono text-sm"
-                />
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="hidden w-full items-center justify-center gap-2 rounded-xl bg-teal-500 py-3.5 text-sm font-semibold text-gray-900 transition hover:bg-teal-400 active:bg-teal-600 disabled:cursor-not-allowed disabled:opacity-50 lg:flex"
+                >
+                  {submitting ? (
+                    <>
+                      <svg
+                        className="h-4 w-4 animate-spin"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                        />
+                      </svg>
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <svg
+                        className="h-4 w-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M5 13l4 4L19 7"
+                        />
+                      </svg>
+                      Save Changes
+                    </>
+                  )}
+                </button>
               </div>
 
-              {/* ── Inline image warning ── */}
-              <AnimatePresence>
-                {inlineImageError && (
-                  <ValidationWarning
-                    key="inline-img-err"
-                    message={inlineImageError}
-                  />
-                )}
-              </AnimatePresence>
+              <div className="hidden w-full flex-col gap-4 lg:sticky lg:top-28 lg:flex lg:w-72 xl:w-80">
+                {renderCoverImageSection("cover-image-upload-desktop")}
+                {renderInlineImageSection("inline-image-trigger-desktop")}
+              </div>
+            </form>
+          </div>
+        </motion.div>
 
-              <AnimatePresence>
-                {showErrors && getContentError() && (
-                  <ValidationWarning
-                    key="content-err"
-                    message={getContentError()!}
+        <div className="fixed inset-x-0 bottom-0 z-20 bg-gradient-to-t from-[#02050a] via-[#02050a]/95 to-transparent p-4 pt-8 lg:hidden">
+          <button
+            type="button"
+            onClick={(e) => handleSubmit(e as any)}
+            disabled={submitting}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-teal-500 py-4 text-sm font-semibold text-gray-900 transition hover:bg-teal-400 active:bg-teal-600 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {submitting ? (
+              <>
+                <svg
+                  className="h-4 w-4 animate-spin"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
                   />
-                )}
-              </AnimatePresence>
-            </div>
-
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={submitting}
-              className="bg-teal-500 hover:bg-teal-400 text-gray-900 font-semibold py-3 rounded-md transition disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {submitting ? "Saving..." : "Save Changes"}
-            </button>
-          </form>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                  />
+                </svg>
+                Saving...
+              </>
+            ) : (
+              <>
+                <svg
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+                Save Changes
+              </>
+            )}
+          </button>
         </div>
-      </motion.main>
+      </main>
     </>
   );
 }
