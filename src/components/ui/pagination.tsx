@@ -8,7 +8,6 @@ import {
   MoreHorizontalIcon,
 } from "lucide-react";
 
-// Utility: safely concatenate Tailwind class names
 function cn(...classes: (string | false | undefined)[]) {
   return classes.filter(Boolean).join(" ");
 }
@@ -21,7 +20,7 @@ export function Pagination({
     <nav
       role="navigation"
       aria-label="pagination"
-      className={cn("mx-auto flex w-full justify-center mt-8", className)}
+      className={cn("mx-auto flex w-full justify-center mt-12", className)}
       {...props}
     />
   );
@@ -33,7 +32,7 @@ export function PaginationContent({
 }: React.ComponentProps<"ul">) {
   return (
     <ul
-      className={cn("flex flex-row items-center gap-1", className)}
+      className={cn("flex flex-row items-center gap-2", className)}
       {...props}
     />
   );
@@ -63,14 +62,19 @@ export function PaginationLink({
     <Link
       href={href}
       className={cn(
-        "px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200",
+        // Base Liquid Glass Styles
+        "relative flex h-10 w-10 items-center justify-center rounded-xl text-sm font-medium transition-all duration-300 backdrop-blur-md border",
         isActive
-          ? "bg-teal-500 text-gray-900 border border-teal-400 shadow-sm"
-          : "text-gray-400 hover:text-teal-400 hover:bg-gray-800",
+          ? "bg-teal-500/20 text-teal-300 border-teal-400/40 shadow-[0_0_20px_rgba(45,212,191,0.2),inset_0_0_10px_rgba(45,212,191,0.1)]"
+          : "bg-white/[0.03] text-white/50 border-white/10 hover:border-teal-400/30 hover:text-teal-300 hover:bg-teal-400/5",
         className,
       )}
       {...props}
     >
+      {/* Subtle Inner Glow for active state */}
+      {isActive && (
+        <span className="absolute inset-0 rounded-[inherit] shadow-[inset_0_0_8px_rgba(255,255,255,0.1)] pointer-events-none" />
+      )}
       {children}
     </Link>
   );
@@ -86,20 +90,20 @@ export function PaginationPrevious({
   disabled?: boolean;
 } & React.ComponentProps<"a">) {
   return (
-    <PaginationLink
+    <Link
       href={href}
       className={cn(
-        "flex items-center gap-1 px-3",
+        "flex h-10 w-10 items-center justify-center rounded-xl border transition-all duration-300 backdrop-blur-md bg-white/[0.03]",
         disabled
-          ? "text-gray-700 pointer-events-none cursor-not-allowed"
-          : "text-teal-400 hover:bg-teal-900/30",
+          ? "opacity-20 pointer-events-none border-white/5 text-white/20"
+          : "border-white/10 text-white/50 hover:border-teal-400/30 hover:text-teal-300 hover:bg-teal-400/5",
         className,
       )}
       {...props}
     >
       <ChevronLeftIcon className="w-4 h-4" />
-      <span className="hidden sm:inline">Previous</span>
-    </PaginationLink>
+      <span className="sr-only">Previous</span>
+    </Link>
   );
 }
 
@@ -113,20 +117,20 @@ export function PaginationNext({
   disabled?: boolean;
 } & React.ComponentProps<"a">) {
   return (
-    <PaginationLink
+    <Link
       href={href}
       className={cn(
-        "flex items-center gap-1 px-3",
+        "flex h-10 w-10 items-center justify-center rounded-xl border transition-all duration-300 backdrop-blur-md bg-white/[0.03]",
         disabled
-          ? "text-gray-700 pointer-events-none cursor-not-allowed"
-          : "text-teal-400 hover:bg-teal-900/30",
+          ? "opacity-20 pointer-events-none border-white/5 text-white/20"
+          : "border-white/10 text-white/50 hover:border-teal-400/30 hover:text-teal-300 hover:bg-teal-400/5",
         className,
       )}
       {...props}
     >
-      <span className="hidden sm:inline">Next</span>
       <ChevronRightIcon className="w-4 h-4" />
-    </PaginationLink>
+      <span className="sr-only">Next</span>
+    </Link>
   );
 }
 
@@ -138,7 +142,7 @@ export function PaginationEllipsis({
     <span
       aria-hidden
       className={cn(
-        "flex w-9 h-9 items-center justify-center text-gray-400",
+        "flex w-10 h-10 items-center justify-center text-white/30",
         className,
       )}
       {...props}

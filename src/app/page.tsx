@@ -1,17 +1,87 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useMemo, useState } from "react";
+import CinematicLoader from "@/components/CinematicLoader";
+import SecondaryLoader from "@/components/SecondaryLoader"; // Added import
 
 type UserInfo = {
   username: string;
   role?: "user" | "admin" | "superadmin";
 };
 
+function GlassButton({
+  href,
+  children,
+}: {
+  href: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group relative flex items-center justify-center overflow-hidden rounded-2xl px-8 py-4 font-semibold text-white transition-all duration-300 ease-out hover:px-10 hover:rounded-3xl"
+      style={{
+        transformOrigin: "center center",
+        backgroundColor: "rgba(2,5,10,0.1)", // dark watery base
+        border: "1px solid rgba(255,255,255,0.04)",
+        boxShadow:
+          "0 8px 24px rgba(0,0,0,0.40), 0 0 24px rgba(45,212,191,0.10), inset 0 1px 1px rgba(255,255,255,0.12), inset 0 -1px 1px rgba(255,255,255,0.02)",
+        backdropFilter: "blur(20px)",
+        WebkitBackdropFilter: "blur(20px)",
+        willChange: "transform, opacity",
+      }}
+    >
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-0 rounded-[inherit]"
+        style={{
+          background:
+            "radial-gradient(circle at 50% 0%, rgba(45,212,191,0.04), transparent 60%)",
+          zIndex: 0,
+        }}
+      />
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-0 rounded-[inherit]"
+        style={{
+          background:
+            "linear-gradient(180deg, rgba(255,255,255,0.06) 0%, transparent 15%)",
+          zIndex: 1,
+        }}
+      />
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-0 rounded-[inherit] opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+        style={{
+          background:
+            "radial-gradient(ellipse at 50% 50%, rgba(45,212,191,0.08) 0%, transparent 70%)",
+          boxShadow:
+            "inset 0 0 12px rgba(45,212,191,0.15), inset 0 1px 2px rgba(255,255,255,0.2)",
+          zIndex: 2,
+        }}
+      />
+      <span
+        className="relative z-10"
+        style={{
+          textShadow: "0 1px 8px rgba(0,0,0,0.22)",
+        }}
+      >
+        {children}
+      </span>
+    </Link>
+  );
+}
+
 export default function HomePage() {
   const [user, setUser] = useState<UserInfo | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loadingUser, setLoadingUser] = useState(true);
+  const [bgReady, setBgReady] = useState(false);
+
+  const [isFirstVisit, setIsFirstVisit] = useState(false);
+  const [introDone, setIntroDone] = useState(false);
+  const [sessionChecked, setSessionChecked] = useState(false);
 
   useEffect(() => {
     fetch("/api/user/username")
@@ -21,124 +91,347 @@ export default function HomePage() {
       })
       .then((data) => setUser(data))
       .catch(() => setUser(null))
-      .finally(() => setLoading(false));
+      .finally(() => setLoadingUser(false));
+  }, []);
+
+  useEffect(() => {
+    const img = new window.Image();
+    img.src = "/images/hero-bg.webp";
+
+    if (img.complete) {
+      setBgReady(true);
+      return;
+    }
+
+    img.onload = () => setBgReady(true);
+    img.onerror = () => setBgReady(true);
+
+    return () => {
+      img.onload = null;
+      img.onerror = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const alreadyVisited =
+      sessionStorage.getItem("home-loader-shown") === "true";
+
+    setIsFirstVisit(!alreadyVisited);
+    setSessionChecked(true);
+
+    if (!alreadyVisited) {
+      const timer = setTimeout(() => {
+        sessionStorage.setItem("home-loader-shown", "true");
+        setIntroDone(true);
+      }, 3200);
+
+      return () => clearTimeout(timer);
+    } else {
+      setIntroDone(true);
+    }
   }, []);
 
   const isAdmin = user?.role === "admin" || user?.role === "superadmin";
+  const pageReady = !loadingUser && bgReady;
+
+  const showLoader = useMemo(() => {
+    if (!sessionChecked) return true;
+    if (isFirstVisit) return !introDone;
+    return !pageReady;
+  }, [sessionChecked, isFirstVisit, introDone, pageReady]);
 
   return (
-    <main className="min-h-screen flex flex-col justify-center items-center bg-slate-950 text-gray-200 px-6 text-center">
-      {/* TITLE */}
-      <motion.h1
-        initial={{ opacity: 0, y: 40 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
-        className="text-5xl md:text-6xl font-bold text-teal-400 mb-4"
+    <>
+      <AnimatePresence>
+        {showLoader &&
+          // Choice logic: If cold entry -> Cinematic. If navigation -> Secondary.
+          (isFirstVisit ? <CinematicLoader /> : <SecondaryLoader />)}
+      </AnimatePresence>
+
+      <motion.main
+        initial={{
+          opacity: 0,
+          scale: 1.04,
+          filter: "blur(16px)",
+        }}
+        animate={{
+          opacity: 1,
+          scale: showLoader ? 1.04 : 1,
+          filter: showLoader ? "blur(16px)" : "blur(0px)",
+        }}
+        transition={{
+          duration: 1.2,
+          ease: [0.22, 1, 0.36, 1],
+        }}
+        className="relative min-h-screen overflow-hidden bg-black text-white"
       >
-        {user
-          ? `Welcome back, ${user.username}`
-          : "Welcome to Palette Publisher"}
-      </motion.h1>
+        <div className="absolute inset-0">
+          <img
+            src="/images/hero-bg.webp"
+            alt="Background"
+            className="h-full w-full object-cover object-[60%_center] sm:object-center"
+          />
+          <div className="absolute inset-0 opacity-[0.03] bg-[radial-gradient(circle_at_center,_white_1px,_transparent_1px)] bg-[size:32px_32px]" />
+        </div>
 
-      {/* SUBTITLE */}
-      <motion.p
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2, duration: 0.5 }}
-        className="text-gray-400 max-w-xl leading-relaxed mb-10"
-      >
-        {user ? (
-          <>
-            Manage your blogs, create new stories, and track approvals.
-            <br />
-            Everything you need is right here.
-          </>
-        ) : (
-          <>
-            Create, edit, and publish your blogs with complete control.
-            <br />
-            Your stories deserve the spotlight — we’ll handle the rest.
-          </>
-        )}
-      </motion.p>
+        <div className="relative z-10 mx-auto flex min-h-screen max-w-7xl items-center px-6">
+          {/* ADDED: md:pt-24 to push the content down on desktop and clear the absolute navbar */}
+          <div className="max-w-2xl md:pt-24">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{
+                opacity: showLoader ? 0 : 1,
+                y: showLoader ? 20 : 0,
+              }}
+              transition={{
+                delay: 0.3,
+                duration: 0.8,
+              }}
+              className="mb-6 inline-flex items-center gap-2 rounded-full border border-teal-500/30 bg-teal-500/10 px-5 py-2"
+            >
+              <span className="h-2 w-2 rounded-full bg-teal-400 animate-pulse" />
+              <span className="text-sm tracking-wide text-teal-300">
+                Your Voice. Your Story. Your World.
+              </span>
+            </motion.div>
 
-      {/* ACTION BUTTONS */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.4 }}
-        className="flex flex-col sm:flex-row gap-4"
-      >
-        {!loading && (
-          <>
-            {/* NOT LOGGED IN */}
-            {!user && (
-              <>
-                <Link
-                  href="/blogs"
-                  className="px-6 py-3 bg-teal-500 hover:bg-teal-400
-                             text-slate-900 font-semibold rounded-lg shadow-md
-                             transition-all duration-200"
-                >
-                  Explore Blogs
-                </Link>
+            <motion.h1
+              initial={{ opacity: 0, y: 50 }}
+              animate={{
+                opacity: showLoader ? 0 : 1,
+                y: showLoader ? 50 : 0,
+              }}
+              transition={{
+                delay: 0.5,
+                duration: 1,
+              }}
+              className="text-5xl font-bold leading-[1.05] tracking-tight md:text-7xl"
+            >
+              {user ? (
+                <>
+                  Welcome back,
+                  <br />
+                  <span className="text-teal-400">{user.username}</span>
+                </>
+              ) : (
+                <>
+                  Write without
+                  <br />
+                  limits.
+                  <br />
+                  Publish with <span className="text-teal-400">purpose.</span>
+                </>
+              )}
+            </motion.h1>
 
-                <Link
-                  href="/login"
-                  className="px-6 py-3 border border-teal-500 text-teal-400
-                             rounded-lg hover:bg-teal-500 hover:text-slate-900
-                             font-semibold transition-all duration-200"
-                >
-                  Login to Publish
-                </Link>
-              </>
-            )}
+            <motion.p
+              initial={{ opacity: 0, y: 30 }}
+              animate={{
+                opacity: showLoader ? 0 : 1,
+                y: showLoader ? 30 : 0,
+              }}
+              transition={{
+                delay: 0.8,
+                duration: 0.9,
+              }}
+              className="mt-8 max-w-xl text-lg leading-relaxed text-gray-300 md:text-xl"
+            >
+              {user ? (
+                <>
+                  Manage your blogs, track approvals, edit stories, and continue
+                  building your creative universe.
+                </>
+              ) : (
+                <>
+                  A modern publishing platform for creators, storytellers, and
+                  dreamers. Beautifully simple. Powerfully yours.
+                </>
+              )}
+            </motion.p>
 
-            {/* LOGGED IN – USER / ADMIN */}
-            {user && (
-              <>
-                <Link
-                  href="/blogs"
-                  className="px-6 py-3 border border-teal-500 text-teal-400
-                             rounded-lg hover:bg-teal-500 hover:text-slate-900
-                             font-semibold transition-all duration-200"
-                >
-                  Create Blogs
-                </Link>
+            <div className="mt-10 flex flex-col gap-4 sm:flex-row">
+              {!loadingUser && (
+                <>
+                  {!user && (
+                    <>
+                      <motion.div
+                        initial={false}
+                        animate={{
+                          opacity: showLoader ? 0 : 1,
+                          y: showLoader ? 30 : 0,
+                        }}
+                        transition={{
+                          delay: 1,
+                          duration: 0.8,
+                        }}
+                      >
+                        <Link
+                          href="/blogs"
+                          className="group relative flex items-center justify-center overflow-hidden rounded-2xl bg-teal-500 px-8 py-4 font-semibold text-slate-900 transition-all duration-300 ease-out hover:px-10 hover:rounded-3xl hover:bg-teal-400"
+                          style={{ transformOrigin: "center center" }}
+                        >
+                          <span
+                            aria-hidden
+                            className="pointer-events-none absolute inset-0 rounded-[inherit] opacity-0 transition-all duration-300 group-hover:opacity-100"
+                            style={{
+                              boxShadow:
+                                "0 0 28px 8px rgba(20,184,166,0.60), 0 0 60px 14px rgba(20,184,166,0.28), inset 3px 3px 6px rgba(255,255,255,0.50), inset -3px -3px 6px rgba(20,184,166,0.35)",
+                              background:
+                                "radial-gradient(ellipse at 40% 30%, rgba(255,255,255,0.32) 0%, rgba(20,184,166,0.12) 60%, transparent 100%)",
+                              zIndex: 1,
+                            }}
+                          />
+                          <span
+                            aria-hidden
+                            className="pointer-events-none absolute inset-0 rounded-[inherit] opacity-0 transition-all duration-300 group-hover:opacity-100"
+                            style={{
+                              boxShadow:
+                                "inset 3px 3px 4px rgba(255,255,255,0.50), inset -3px -3px 4px rgba(255,255,255,0.25)",
+                              zIndex: 2,
+                            }}
+                          />
+                          <span
+                            className="relative font-semibold"
+                            style={{ zIndex: 10 }}
+                          >
+                            Explore Blogs
+                          </span>
+                        </Link>
+                      </motion.div>
 
-                {/* VISIT POST PALETTE */}
-                <a
-                  href="https://postpalette.online/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-6 py-3 border border-gray-600 text-gray-300
-                             rounded-lg hover:bg-emerald-400 hover:border-emerald-400 hover:text-slate-950
-                             font-semibold transition-all duration-200"
-                >
-                  Visit POST PALETTE
-                </a>
-              </>
-            )}
+                      <motion.div
+                        initial={false}
+                        animate={{
+                          opacity: showLoader ? 0 : 1,
+                          y: showLoader ? 30 : 0,
+                        }}
+                        transition={{
+                          delay: 1.08,
+                          duration: 0.8,
+                        }}
+                      >
+                        <GlassButton href="/login">
+                          Login to Publish
+                        </GlassButton>
+                      </motion.div>
+                    </>
+                  )}
 
-            {/* ADMIN + SUPERADMIN */}
-            {isAdmin && (
-              <Link
-                href="/admin/blogs"
-                className="px-6 py-3 border border-yellow-500 text-yellow-400
-                           rounded-lg hover:bg-yellow-500 hover:text-slate-900
-                           font-semibold transition-all duration-200"
-              >
-                Pending Blogs
-              </Link>
-            )}
-          </>
-        )}
-      </motion.div>
+                  {user && (
+                    <>
+                      <motion.div
+                        initial={false}
+                        animate={{
+                          opacity: showLoader ? 0 : 1,
+                          y: showLoader ? 30 : 0,
+                        }}
+                        transition={{
+                          delay: 1,
+                          duration: 0.8,
+                        }}
+                      >
+                        <Link
+                          href="/create"
+                          className="group relative flex items-center justify-center overflow-hidden rounded-2xl bg-teal-500 px-8 py-4 font-semibold text-slate-900 transition-all duration-300 ease-out hover:px-10 hover:rounded-3xl hover:bg-teal-400"
+                          style={{ transformOrigin: "center center" }}
+                        >
+                          <span
+                            aria-hidden
+                            className="pointer-events-none absolute inset-0 rounded-[inherit] opacity-0 transition-all duration-300 group-hover:opacity-100"
+                            style={{
+                              boxShadow:
+                                "0 0 28px 8px rgba(20,184,166,0.60), 0 0 60px 14px rgba(20,184,166,0.28), inset 3px 3px 6px rgba(255,255,255,0.50), inset -3px -3px 6px rgba(20,184,166,0.35)",
+                              background:
+                                "radial-gradient(ellipse at 40% 30%, rgba(255,255,255,0.32) 0%, rgba(20,184,166,0.12) 60%, transparent 100%)",
+                              zIndex: 1,
+                            }}
+                          />
+                          <span
+                            aria-hidden
+                            className="pointer-events-none absolute inset-0 rounded-[inherit] opacity-0 transition-all duration-300 group-hover:opacity-100"
+                            style={{
+                              boxShadow:
+                                "inset 3px 3px 4px rgba(255,255,255,0.50), inset -3px -3px 4px rgba(255,255,255,0.25)",
+                              zIndex: 2,
+                            }}
+                          />
+                          <span
+                            className="relative font-semibold"
+                            style={{ zIndex: 10 }}
+                          >
+                            Create Blog
+                          </span>
+                        </Link>
+                      </motion.div>
 
-      {/* FOOTER */}
-      <footer className="mt-16 text-sm text-gray-600">
-        © {new Date().getFullYear()} Palette Publisher. All rights reserved.
-      </footer>
-    </main>
+                      <motion.div
+                        initial={false}
+                        animate={{
+                          opacity: showLoader ? 0 : 1,
+                          y: showLoader ? 30 : 0,
+                        }}
+                        transition={{
+                          delay: 1.08,
+                          duration: 0.8,
+                        }}
+                      >
+                        <GlassButton href="/blogs">Your Blogs</GlassButton>
+                      </motion.div>
+                    </>
+                  )}
+
+                  {isAdmin && (
+                    <motion.div
+                      initial={false}
+                      animate={{
+                        opacity: showLoader ? 0 : 1,
+                        y: showLoader ? 30 : 0,
+                      }}
+                      transition={{
+                        delay: 1.16,
+                        duration: 0.8,
+                      }}
+                    >
+                      <Link
+                        href="/admin/blogs"
+                        className="group relative flex items-center justify-center overflow-hidden rounded-2xl bg-yellow-500 px-8 py-4 font-semibold text-black transition-all duration-300 ease-out hover:px-10 hover:rounded-3xl hover:bg-yellow-400"
+                        style={{ transformOrigin: "center center" }}
+                      >
+                        <span
+                          aria-hidden
+                          className="pointer-events-none absolute inset-0 rounded-[inherit] opacity-0 transition-all duration-300 group-hover:opacity-100"
+                          style={{
+                            boxShadow:
+                              "0 0 28px 8px rgba(234,179,8,0.55), 0 0 60px 14px rgba(234,179,8,0.25), inset 3px 3px 6px rgba(255,255,255,0.48), inset -3px -3px 6px rgba(234,179,8,0.32)",
+                            background:
+                              "radial-gradient(ellipse at 40% 30%, rgba(255,255,255,0.30) 0%, rgba(234,179,8,0.10) 60%, transparent 100%)",
+                            zIndex: 1,
+                          }}
+                        />
+                        <span
+                          aria-hidden
+                          className="pointer-events-none absolute inset-0 rounded-[inherit] opacity-0 transition-all duration-300 group-hover:opacity-100"
+                          style={{
+                            boxShadow:
+                              "inset 3px 3px 4px rgba(255,255,255,0.48), inset -3px -3px 4px rgba(255,255,255,0.20)",
+                            zIndex: 2,
+                          }}
+                        />
+                        <span
+                          className="relative font-semibold"
+                          style={{ zIndex: 10 }}
+                        >
+                          Pending Blogs
+                        </span>
+                      </Link>
+                    </motion.div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </motion.main>
+    </>
   );
 }

@@ -3,6 +3,7 @@ import { checkUserAuth } from "@/lib/adminAuth";
 import dbConnect from "@/lib/mongoose";
 import Blog from "@/models/Blog";
 import { sendBlogEmail } from "@/lib/email";
+import { convertToBase64WebP } from "@/lib/optimizeImage";
 
 function extractFilenameFromBase64(base64?: string): string | undefined {
   if (!base64 || !base64.startsWith("data:image/")) return undefined;
@@ -30,10 +31,9 @@ export async function PUT(
 
     const { id } = await params;
     const body = await req.json();
-    const { title, slug, content, description, coverImage, categories, inlineImages } = body;
+    let { title, slug, content, description, coverImage, categories, inlineImages } = body;
 
     await dbConnect();
-
     const blog = await Blog.findById(id);
     if (!blog) return NextResponse.json({ error: "Blog not found" }, { status: 404 });
 
@@ -45,16 +45,28 @@ export async function PUT(
     const slugExists = await Blog.findOne({ slug: normalizedSlug, _id: { $ne: id } });
     if (slugExists) return NextResponse.json({ error: "Slug already taken" }, { status: 400 });
 
+    /* ───── Optimization Logic ───── */
+    const optimizedCover = await convertToBase64WebP(coverImage);
+    
+    let processedInline = blog.inlineImages || [];
+    if (Array.isArray(inlineImages)) {
+      // If inlineImages is sent in body (even as []), we use it to allow deletion
+      processedInline = await Promise.all(
+        inlineImages.map(async (img: any) => ({
+          ...img,
+          base64: img.base64.startsWith('data:') ? await convertToBase64WebP(img.base64) : img.base64
+        }))
+      );
+    }
+
     if (blog.status === "published" || blog.status === "approved") {
-      // For pending edit: store coverImage as-is so approve-edit can interpret it
-      // "" = user removed cover, base64 = new upload, URL = unchanged existing
       let pendingCoverImageName: string | undefined;
       if (coverImage === "") {
-        pendingCoverImageName = undefined; // removing cover, no name needed
+        pendingCoverImageName = undefined;
       } else if (coverImage?.startsWith("data:")) {
         pendingCoverImageName = extractFilenameFromBase64(coverImage) || "cover.jpg";
       } else {
-        pendingCoverImageName = blog.coverImageName; // existing URL, keep existing name
+        pendingCoverImageName = blog.coverImageName;
       }
 
       blog.isEditPending = true;
@@ -63,16 +75,15 @@ export async function PUT(
         slug: normalizedSlug,
         content: content.trim(),
         description: description.trim(),
-        coverImage: coverImage,  // store as-is for approve-edit logic
+        coverImage: optimizedCover, 
         coverImageName: pendingCoverImageName,
         categories,
-        inlineImages: Array.isArray(inlineImages) ? inlineImages : (blog.inlineImages ?? []),
+        inlineImages: processedInline,
       };
       blog.isEditRejected = false;
       blog.adminNotes = undefined;
       await blog.save();
 
-      // Send email notification about the edit submission
       await sendBlogEmail({
         type: "edit_submitted",
         blogTitle: blog.title,
@@ -85,23 +96,20 @@ export async function PUT(
 
       return NextResponse.json({ message: "Edit submitted for admin review", isEditPending: true });
     } else {
-      // Directly update if not published/approved, no pending state needed
       blog.title = title.trim();
       blog.slug = normalizedSlug;
       blog.content = content.trim();
       blog.description = description.trim();
       blog.categories = categories;
-      blog.inlineImages = Array.isArray(inlineImages) ? inlineImages : (blog.inlineImages ?? []);
+      blog.inlineImages = processedInline;
 
       if (coverImage === "") {
-        // User explicitly removed the cover image
         blog.coverImage = undefined;
         blog.coverImageName = undefined;
       } else if (coverImage) {
-        blog.coverImage = coverImage.trim();
-        blog.coverImageName = extractFilenameFromBase64(coverImage) || blog.coverImageName;
+        blog.coverImage = optimizedCover;
+        blog.coverImageName = coverImage.startsWith("data:") ? extractFilenameFromBase64(coverImage) : blog.coverImageName;
       }
-      // if coverImage is undefined (shouldn't happen), keep existing
 
       if (blog.status === "rejected") blog.status = "pending";
       await blog.save();
