@@ -89,7 +89,7 @@ export default function CinematicLoader() {
           />
 
           <img
-            src="/images/Logo.png"
+            src="/images/Logo.webp"
             alt="Logo"
             className="relative z-10 w-[180px] object-contain md:w-[240px]"
             style={{ willChange: "transform, opacity" }}

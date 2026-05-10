@@ -65,7 +65,7 @@ export default function AboutPage() {
       {/* BACKGROUND IMAGE */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <Image
-          src="/images/hero-bg.jpg"
+          src="/images/hero-bg.webp"
           alt="Palette Publisher background"
           fill
           priority
@@ -178,7 +178,7 @@ export default function AboutPage() {
             >
               <div className="absolute left-[50%] top-[36%] z-20 -translate-x-1/2 -translate-y-1/2">
                 <Image
-                  src="/images/Logo.png"
+                  src="/images/Logo.webp"
                   alt="Palette Publisher logo"
                   width={340}
                   height={340}

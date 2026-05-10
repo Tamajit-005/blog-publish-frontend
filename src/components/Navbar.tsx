@@ -92,7 +92,7 @@ const Navbar = () => {
               className="flex shrink-0 translate-y-2 md:translate-y-3 items-center transition-all duration-500 hover:scale-[1.02] hover:opacity-95"
             >
               <img
-                src="/images/Logo.png"
+                src="/images/Logo.webp"
                 alt="Palette Publisher"
                 className="-translate-x-2 md:-translate-x-4 -translate-y-1 h-[72px] md:h-[88px] w-auto object-contain drop-shadow-[0_0_18px_rgba(45,212,191,0.22)] lg:h-[112px]"
               />

@@ -2,26 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
-/* HIDE SCROLLBAR BUT KEEP SCROLLING ENABLED */
-html,
-body {
+/* --- GLOBAL SETTINGS --- */
+html {
   overflow-x: hidden;
-
-  /* Firefox */
-  scrollbar-width: none;
-
-  /* IE / old Edge */
-  -ms-overflow-style: none;
 }
 
-/* Chrome, Edge, Safari */
-html::-webkit-scrollbar,
-body::-webkit-scrollbar {
-  display: none;
+/* Fix for Next.js Smooth Scroll Warning */
+html[data-scroll-behavior="smooth"] {
+  scroll-behavior: smooth;
 }
 
 body {
   @apply bg-slate-950 text-gray-100;
+  overflow-x: hidden;
 }
 
 /* --- CUSTOM LIQUID GLASS SCROLLBAR (SLEEK GRAY) --- */
@@ -35,7 +28,7 @@ body {
 /* 2. The Track - Transparent so the UI behind it shows through */
 ::-webkit-scrollbar-track {
   background: transparent;
-  margin: 4px; /* Gives some breathing room */
+  margin: 4px;
 }
 
 /* 3. The Thumb - Subtle Gray with Glass effect */
@@ -47,7 +40,7 @@ body {
   -webkit-backdrop-filter: blur(4px);
 }
 
-/* 4. Hover State - Brighter Gray (No Teal Glow) */
+/* 4. Hover State - Brighter Gray */
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.15);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -58,7 +51,7 @@ body {
   background: rgba(255, 255, 255, 0.2);
 }
 
-/* 6. Firefox Support (Gray theme) */
+/* 6. Firefox Support */
 * {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.1) transparent;

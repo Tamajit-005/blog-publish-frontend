@@ -96,7 +96,7 @@ export default function HomePage() {
 
   useEffect(() => {
     const img = new window.Image();
-    img.src = "/images/hero-bg.jpg";
+    img.src = "/images/hero-bg.webp";
 
     if (img.complete) {
       setBgReady(true);
@@ -167,7 +167,7 @@ export default function HomePage() {
       >
         <div className="absolute inset-0">
           <img
-            src="/images/hero-bg.jpg"
+            src="/images/hero-bg.webp"
             alt="Background"
             className="h-full w-full object-cover object-[60%_center] sm:object-center"
           />

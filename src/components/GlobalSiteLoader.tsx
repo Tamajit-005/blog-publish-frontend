@@ -23,7 +23,7 @@ export default function GlobalSiteLoader() {
     setPageReady(false);
 
     const img = new window.Image();
-    img.src = "/images/hero-bg.jpg";
+    img.src = "/images/hero-bg.webp";
 
     if (img.complete) {
       setPageReady(true);

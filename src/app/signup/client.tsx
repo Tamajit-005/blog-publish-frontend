@@ -86,7 +86,7 @@ export default function SignupPage() {
         <div className="absolute inset-0">
           <div
             className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-            style={{ backgroundImage: "url('/images/hero-bg.jpg')" }}
+            style={{ backgroundImage: "url('/images/hero-bg.webp')" }}
           />
           <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(3,6,10,0.65),rgba(3,6,10,0.85))]" />
         </div>
@@ -120,7 +120,7 @@ export default function SignupPage() {
       <div className="absolute inset-0">
         <div
           className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-          style={{ backgroundImage: "url('/images/hero-bg.jpg')" }}
+          style={{ backgroundImage: "url('/images/hero-bg.webp')" }}
         />
         <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(3,6,10,0.55),rgba(3,6,10,0.78))]" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(45,212,191,0.08),transparent_26%)]" />

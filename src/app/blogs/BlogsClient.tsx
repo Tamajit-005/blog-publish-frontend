@@ -18,7 +18,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { FIXED_CATEGORIES } from "@/lib/categories";
-import PyramidLoader from "@/components/PyramidLoader"; // Imported the new loader
+import PyramidLoader from "@/components/PyramidLoader";
 
 const CANCELLATION_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -333,7 +333,7 @@ export default function BlogsClient() {
         toast.error("Failed to delete blog");
         setBlogs((prev) => (prev ? [blog, ...prev] : [blog]));
       }
-    }, 8000);
+    }, 10000);
 
     pendingDeletions.current.set(blog._id, timer);
   };
@@ -417,7 +417,7 @@ export default function BlogsClient() {
     <>
       <div className="fixed inset-0 pointer-events-none z-0">
         <Image
-          src="/images/hero-bg.jpg"
+          src="/images/hero-bg.webp"
           alt="Palette Publisher background"
           fill
           priority

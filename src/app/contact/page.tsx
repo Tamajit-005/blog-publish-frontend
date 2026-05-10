@@ -4,15 +4,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import Image from "next/image";
-import {
-  Mail,
-  Clock3,
-  MapPin,
-  MessageCircle,
-  ArrowRight,
-  Send,
-  Info,
-} from "lucide-react";
+import { Mail, Clock3, MapPin, Send, Info } from "lucide-react";
 
 export default function ContactPage() {
   const [user, setUser] = useState<any>(null);
@@ -110,7 +102,7 @@ export default function ContactPage() {
         {/* BACKGROUND IMAGE - Locked height for mobile stability */}
         <div className="fixed left-0 top-0 z-0 h-[100svh] w-full pointer-events-none">
           <Image
-            src="/images/hero-bg.jpg"
+            src="/images/hero-bg.webp"
             alt="Palette Publisher background"
             fill
             priority

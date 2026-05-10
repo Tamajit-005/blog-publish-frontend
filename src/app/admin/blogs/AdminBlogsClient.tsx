@@ -333,7 +333,7 @@ export default function AdminBlogsClient() {
       {/* STATIC HERO BACKGROUND */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <Image
-          src="/images/hero-bg.jpg"
+          src="/images/hero-bg.webp"
           alt="Palette Publisher background"
           fill
           priority

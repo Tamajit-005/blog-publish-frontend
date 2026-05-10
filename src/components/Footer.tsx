@@ -24,7 +24,7 @@ export default function Footer() {
           <div className="flex flex-col items-center text-center lg:col-span-3 lg:items-start lg:text-left">
             <Link href="/" className="inline-block">
               <Image
-                src="/images/Logo.png"
+                src="/images/Logo.webp"
                 alt="Palette Publisher Logo"
                 width={200}
                 height={50}
