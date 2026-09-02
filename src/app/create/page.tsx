@@ -131,7 +131,6 @@ function ToolbarDivider() {
 }
 
 interface Category {
-  id: number;
   name: string;
   slug: string;
 }
@@ -422,6 +421,25 @@ export default function CreateBlogPage() {
         : selStart + wrappedText.length;
 
     el.selectionStart = el.selectionEnd = cursorPos;
+    el.focus();
+  }
+
+  function handleLink() {
+    const el = textareaRef.current;
+    if (!el) return;
+    const url = prompt("Enter URL:", "https://");
+    if (!url) return;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const selected = el.value.substring(start, end) || "text";
+    const before = el.value.substring(0, start);
+    const after = el.value.substring(end);
+    const wrapped = `[${selected}](${url})`;
+    const newVal = before + wrapped + after;
+    el.value = newVal;
+    setContent(newVal);
+    el.selectionStart = start;
+    el.selectionEnd = start + wrapped.length;
     el.focus();
   }
 
@@ -878,7 +896,7 @@ export default function CreateBlogPage() {
 
                       return (
                         <button
-                          key={cat.id}
+                          key={cat.slug}
                           type="button"
                           onClick={() => toggleCategory(cat.slug)}
                           disabled={isDisabled}
@@ -974,6 +992,9 @@ export default function CreateBlogPage() {
                         >
                           <span className="text-xs line-through">S</span>
                         </ToolbarButton>
+                        <ToolbarButton onClick={handleLink} title="Insert link">
+                          <span className="text-xs">🔗</span>
+                        </ToolbarButton>
 
                         <ToolbarDivider />
 
@@ -1000,6 +1021,18 @@ export default function CreateBlogPage() {
                           title="Heading 4"
                         >
                           <span className="text-xs font-bold">H4</span>
+                        </ToolbarButton>
+                        <ToolbarButton
+                          onClick={() => handleHeading(5)}
+                          title="Heading 5"
+                        >
+                          <span className="text-xs font-bold">H5</span>
+                        </ToolbarButton>
+                        <ToolbarButton
+                          onClick={() => handleHeading(6)}
+                          title="Heading 6"
+                        >
+                          <span className="text-xs font-bold">H6</span>
                         </ToolbarButton>
 
                         <ToolbarDivider />

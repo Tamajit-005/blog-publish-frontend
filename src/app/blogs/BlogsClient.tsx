@@ -17,7 +17,7 @@ import {
   X,
   AlertCircle,
 } from "lucide-react";
-import { FIXED_CATEGORIES } from "@/lib/categories";
+import { SANITY_CATEGORIES, FIXED_CATEGORIES } from "@/lib/categories";
 import PyramidLoader from "@/components/PyramidLoader";
 
 const CANCELLATION_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
@@ -64,13 +64,12 @@ function getDisplayName(cat: any): string {
   if (!cat) return "Uncategorized";
   const strVal =
     typeof cat === "object"
-      ? cat.name || cat.slug || cat.documentId
+      ? cat.name || cat.slug
       : String(cat);
 
-  const found = FIXED_CATEGORIES.find(
+  const found = SANITY_CATEGORIES.find(
     (c) =>
       c.slug === strVal ||
-      c.documentId === strVal ||
       c.name === strVal ||
       c.name.toLowerCase() === strVal.toLowerCase(),
   );
@@ -342,7 +341,7 @@ export default function BlogsClient() {
     if (!blogs) return [];
     if (selectedCategory === "All") return blogs;
 
-    const categoryObj = FIXED_CATEGORIES.find(
+    const categoryObj = SANITY_CATEGORIES.find(
       (c) => c.name === selectedCategory,
     );
 
@@ -356,17 +355,12 @@ export default function BlogsClient() {
       return cats.some((cat) => {
         const strVal =
           typeof cat === "object"
-            ? cat.name || cat.slug || cat.documentId
+            ? cat.name || cat.slug
             : String(cat);
 
         if (strVal === selectedCategory) return true;
-        if (
-          categoryObj &&
-          (strVal === categoryObj.slug || strVal === categoryObj.documentId)
-        )
-          return true;
-        if (strVal.toLowerCase() === selectedCategory.toLowerCase())
-          return true;
+        if (categoryObj && strVal === categoryObj.slug) return true;
+        if (strVal.toLowerCase() === selectedCategory.toLowerCase()) return true;
 
         return false;
       });
@@ -474,7 +468,7 @@ export default function BlogsClient() {
             </div>
 
             <div className="mb-8 flex overflow-x-auto pb-4 gap-2.5 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-              {["All", ...FIXED_CATEGORIES.map((c) => c.name)].map((cat) => {
+              {["All", ...SANITY_CATEGORIES.map((c) => c.name)].map((cat) => {
                 const isActive = selectedCategory === cat;
                 return (
                   <button

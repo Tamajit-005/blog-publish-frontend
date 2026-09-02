@@ -1,4 +1,4 @@
-// Image interface 
+// Image interface
 export interface ImageData {
   url: string;
   alternativeText?: string | null;
@@ -8,7 +8,7 @@ export interface ImageData {
   formats?: Record<string, { url: string; width: number; height: number }>;
 }
 
-// Author interface 
+// Author interface
 export interface Author {
   name: string;
   email?: string;
@@ -20,15 +20,17 @@ export interface Writer {
   email?: string;
 }
 
-// Category interface
+// Category — matches Sanity (slug is primary key)
 export interface Category {
-  documentId: string; 
   name: string;
-  slug?: string;
+  slug: string;
   description?: string | null;
+  // Legacy Strapi fields — kept optional for back-compat reads
+  documentId?: string;
+  id?: number | string;
 }
 
-// Blog post interface 
+// Blog post interface
 export interface BlogPost {
   documentId: string;
   title: string;
