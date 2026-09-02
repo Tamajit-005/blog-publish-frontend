@@ -7,8 +7,8 @@ export interface IBlog extends Document {
   description: string;
   coverImage?: string;
   coverImageName?: string;
-  strapiCoverUrl?: string;
-  inlineImages?: { id: string; placeholder: string; base64: string; strapiUrl?: string }[];
+  sanityCoverAssetId?: string;
+  inlineImages?: { id: string; placeholder: string; base64: string; sanityAssetId?: string; sanityUrl?: string }[];
   categories: string[];
   author: { auth0Id: string; username: string; email: string };
   status: "draft" | "pending" | "approved" | "rejected" | "published";
@@ -24,14 +24,13 @@ export interface IBlog extends Document {
     description: string;
     coverImage?: string;
     coverImageName?: string;
-    strapiCoverUrl?: string;
-    inlineImages?: { id: string; placeholder: string; base64: string; strapiUrl?: string }[];
+    sanityCoverAssetId?: string;
+    inlineImages?: { id: string; placeholder: string; base64: string; sanityAssetId?: string; sanityUrl?: string }[];
     categories: string[];
   };
   adminNotes?: string;
   deletionRejectedNotes?: string;
-  strapiId?: string;
-  strapiWriterId?: number;
+  sanityId?: string;
   publishedAt?: Date;
   rejectedAt?: Date;
   createdAt: Date;
@@ -46,13 +45,14 @@ const BlogSchema = new mongoose.Schema<IBlog>(
     description: { type: String, required: true, trim: true, minlength: 10, maxlength: 300 },
     coverImage: String,
     coverImageName: String,
-    strapiCoverUrl: String,
+    sanityCoverAssetId: String,
     inlineImages: [
       {
         id: { type: String, required: true },
         placeholder: { type: String, required: true },
         base64: { type: String, required: true },
-        strapiUrl: { type: String },
+        sanityAssetId: { type: String },
+        sanityUrl: { type: String },
       },
     ],
     categories: {
@@ -85,21 +85,21 @@ const BlogSchema = new mongoose.Schema<IBlog>(
       description: String,
       coverImage: String,
       coverImageName: String,
-      strapiCoverUrl: String,
+      sanityCoverAssetId: String,
       inlineImages: [
         {
           id: { type: String, required: true },
           placeholder: { type: String, required: true },
           base64: { type: String, required: true },
-          strapiUrl: { type: String },
+          sanityAssetId: { type: String },
+          sanityUrl: { type: String },
         },
       ],
       categories: [String],
     },
     adminNotes: String,
     deletionRejectedNotes: String,
-    strapiId: String,
-    strapiWriterId: Number,
+    sanityId: String,
     publishedAt: Date,
     rejectedAt: Date,
   },
@@ -111,6 +111,7 @@ BlogSchema.index({ status: 1, createdAt: -1 });
 BlogSchema.index({ categories: 1 });
 BlogSchema.index({ deletionRequested: 1 });
 BlogSchema.index({ isEditPending: 1 });
+BlogSchema.index({ sanityId: 1 });
 
 if (mongoose.models.Blog) delete mongoose.models.Blog;
 const Blog: Model<IBlog> = mongoose.model<IBlog>("Blog", BlogSchema);

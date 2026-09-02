@@ -12,12 +12,6 @@ export interface IUser extends Document {
   lastLogoutAt?: Date;
   lastLogoutIp?: string;
 
-  // 🔗 Strapi linkage (SERVER ONLY)
-  strapi?: {
-    userId?: number;
-    password?: string;
-  };
-
   createdAt: Date;
   updatedAt: Date;
 }
@@ -50,17 +44,6 @@ const UserSchema = new mongoose.Schema<IUser>(
       type: String,
       enum: ["user", "admin", "superadmin"],
       default: "user",
-    },
-
-    // 🔗 Strapi linkage (SERVER ONLY)
-    strapi: {
-      userId: {
-        type: Number,
-      },
-      password: {
-        type: String,
-        select: false,
-      },
     },
 
     lastLoginAt: Date,
