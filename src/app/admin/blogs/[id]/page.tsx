@@ -8,6 +8,10 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import rehypeRaw from "rehype-raw";
+import { PortableText } from "@portabletext/react";
+import { portableComponents } from "@/lib/portableComponents";
+import { markdownToBlocks } from "@/lib/markdownToBlocks";
+import { urlFor } from "@/sanity/image";
 import moment from "moment";
 import { toast } from "react-hot-toast";
 import {
@@ -26,6 +30,8 @@ interface InlineImage {
   id: string;
   placeholder: string;
   base64: string;
+  sanityAssetId?: string;
+  sanityUrl?: string;
 }
 
 interface Blog {
@@ -63,6 +69,7 @@ export default function AdminBlogDetailPage() {
   const blogId = typeof params?.id === "string" ? params.id : "";
 
   const [blog, setBlog] = useState<Blog | null>(null);
+  const [sanityPost, setSanityPost] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -73,7 +80,19 @@ export default function AdminBlogDetailPage() {
         const res = await fetch(`/api/admin/blogs/${blogId}`);
         if (!res.ok) throw new Error("Failed to fetch blog");
         const data = await res.json();
-        setBlog(data.blog);
+        const fetched = data.blog;
+        setBlog(fetched);
+        // If published with sanityId, fetch accurate Sanity doc for view
+        const sid = (fetched as any)?.sanityId;
+        if (sid && (fetched.status === "published" || fetched.status === "approved")) {
+          try {
+            const sRes = await fetch(`/api/sanity/post/${sid}`);
+            if (sRes.ok) {
+              const sData = await sRes.json();
+              setSanityPost(sData.post);
+            }
+          } catch {}
+        }
       } catch (err: any) {
         setError(err.message);
       } finally {
@@ -245,6 +264,7 @@ export default function AdminBlogDetailPage() {
           content: blog.pendingEdit.content,
           description: blog.pendingEdit.description,
           coverImage: blog.pendingEdit.coverImage ?? blog.coverImage,
+          inlineImages: blog.pendingEdit.inlineImages ?? blog.inlineImages,
           categories: blog.pendingEdit.categories,
         }
       : blog;
@@ -287,7 +307,7 @@ export default function AdminBlogDetailPage() {
           Back to Admin Dashboard
         </button>
 
-        <div className="flex flex-col lg:grid lg:grid-cols-[1fr_380px] gap-6 lg:gap-8 items-start lg:h-[calc(100vh-220px)]">
+        <div className="flex flex-col lg:grid lg:grid-cols-[1fr_380px] gap-6 lg:gap-8 items-start lg:h-[130vh]">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -331,114 +351,108 @@ export default function AdminBlogDetailPage() {
             </div>
 
             <div className="flex-1 p-6 sm:p-8 lg:overflow-y-auto">
-              {displayBlog.coverImage && (
+              {blog.isEditPending ? (
+                displayBlog.coverImage ? (
+                  <div className="relative aspect-video w-full rounded-2xl overflow-hidden mb-8 border border-white/5 shadow-inner">
+                    <Image src={displayBlog.coverImage} alt="Cover" fill className="object-cover" />
+                  </div>
+                ) : null
+              ) : sanityPost?.image ? (
                 <div className="relative aspect-video w-full rounded-2xl overflow-hidden mb-8 border border-white/5 shadow-inner">
-                  <Image
-                    src={displayBlog.coverImage}
-                    alt="Cover"
-                    fill
-                    className="object-cover"
+                  <img
+                    src={urlFor(sanityPost.image).width(800).url()}
+                    alt={sanityPost.image?.alt || displayBlog.title}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
                   />
                 </div>
-              )}
-              {displayBlog.description && (
+              ) : displayBlog.coverImage ? (
+                <div className="relative aspect-video w-full rounded-2xl overflow-hidden mb-8 border border-white/5 shadow-inner">
+                  <Image src={displayBlog.coverImage} alt="Cover" fill className="object-cover" />
+                </div>
+              ) : null}
+              {(blog.isEditPending ? displayBlog.description : sanityPost?.description || displayBlog.description) && (
                 <div className="mb-10 text-white/70 leading-relaxed text-lg sm:text-xl font-medium border-l-4 border-teal-500/40 pl-5 sm:pl-6 py-1">
-                  {displayBlog.description}
+                  {blog.isEditPending ? displayBlog.description : sanityPost?.description || displayBlog.description}
+                </div>
+              )}
+
+              {blog.isEditPending && blog.pendingEdit && (
+                <div className="mb-6 rounded-xl border border-blue-500/20 bg-blue-500/10 px-4 py-3 text-sm text-blue-300">
+                  Viewing <span className="font-semibold">requested edit</span> — not yet published. Approve or reject below.
                 </div>
               )}
 
               <div className="max-w-none">
-                <Markdown
-                  remarkPlugins={[remarkGfm, remarkBreaks]}
-                  rehypePlugins={[rehypeRaw]}
-                  urlTransform={(value) => value}
-                  components={{
-                    h1: ({ children }) => (
-                      <h1 className="text-4xl sm:text-5xl font-black text-teal-400 mt-12 mb-6 border-b border-teal-500/20 pb-4 tracking-tight drop-shadow-[0_0_15px_rgba(45,212,191,0.3)]">
-                        {children}
-                      </h1>
-                    ),
-                    h2: ({ children }) => (
-                      <h2 className="text-3xl sm:text-4xl font-extrabold text-teal-300 mt-10 mb-5 tracking-tight">
-                        {children}
-                      </h2>
-                    ),
-                    h3: ({ children }) => (
-                      <h3 className="text-2xl sm:text-3xl font-bold text-teal-200/90 mt-8 mb-4">
-                        {children}
-                      </h3>
-                    ),
-                    h4: ({ children }) => (
-                      <h4 className="text-xl sm:text-2xl font-semibold text-teal-100/80 mt-6 mb-3">
-                        {children}
-                      </h4>
-                    ),
-                    p: ({ children }) => (
-                      <p className="text-gray-300 leading-relaxed my-4 text-lg">
-                        {children}
-                      </p>
-                    ),
-                    ul: ({ children }) => (
-                      <ul className="list-disc list-inside my-4 pl-2 text-gray-300 space-y-1">
-                        {children}
-                      </ul>
-                    ),
-                    ol: ({ children }) => (
-                      <ol className="list-decimal list-inside my-4 pl-2 text-gray-300 space-y-1">
-                        {children}
-                      </ol>
-                    ),
-                    li: ({ children }) => <li className="ml-2">{children}</li>,
-                    blockquote: ({ children }) => (
-                      <blockquote className="border-l-4 border-teal-500 pl-4 ml-2 italic text-gray-400 my-4">
-                        {children}
-                      </blockquote>
-                    ),
-                    pre: ({ children }) => (
-                      <pre
-                        className="bg-[#04070c] border border-white/5 p-5 sm:p-6 rounded-2xl my-8 overflow-x-auto text-[0.9rem] cursor-pointer relative group shadow-lg"
-                        onClick={(e) =>
-                          handleCopyCode(e.currentTarget.innerText)
-                        }
+                {blog.isEditPending && blog.pendingEdit ? (
+                  (() => {
+                    try {
+                      const inlineMap = new Map(
+                        (displayBlog.inlineImages || []).map((img: any) => [
+                          img.placeholder,
+                          img.sanityAssetId || img.sanityUrl || img.base64,
+                        ]),
+                      );
+                      // Also map bare placeholder without brackets for markdownToBlocks fallback
+                      for (const img of displayBlog.inlineImages || []) {
+                        const bare = (img.placeholder || "").slice(2, -1);
+                        if (bare && !inlineMap.has(bare)) inlineMap.set(bare, img.sanityAssetId || img.sanityUrl || img.base64);
+                      }
+                      const blocks = markdownToBlocks(displayBlog.content || "", inlineMap as any);
+                      if (blocks.length) return <PortableText value={blocks as any} components={portableComponents} />;
+                    } catch {}
+                    return null;
+                  })()
+                ) : sanityPost?.body ? (
+                  <PortableText value={sanityPost.body} components={portableComponents} />
+                ) : (
+                  (() => {
+                    try {
+                      const inlineMap = new Map(
+                        (displayBlog.inlineImages || []).map((img: any) => [img.placeholder, img.sanityAssetId || img.sanityUrl || img.base64]),
+                      );
+                      for (const img of displayBlog.inlineImages || []) {
+                        const bare = (img.placeholder || "").slice(2, -1);
+                        if (bare && !inlineMap.has(bare)) inlineMap.set(bare, img.sanityAssetId || img.sanityUrl || img.base64);
+                      }
+                      const blocks = markdownToBlocks(displayBlog.content || "", inlineMap as any);
+                      if (blocks.length) return <PortableText value={blocks as any} components={portableComponents} />;
+                    } catch {}
+                    return (
+                      <Markdown
+                        remarkPlugins={[remarkGfm, remarkBreaks]}
+                        rehypePlugins={[rehypeRaw]}
+                        urlTransform={(value) => value}
+                        components={{
+                          h1: ({ children }) => <h1 className="text-4xl sm:text-5xl font-black text-teal-400 mt-12 mb-6 border-b border-teal-500/20 pb-4 tracking-tight drop-shadow-[0_0_15px_rgba(45,212,191,0.3)]">{children}</h1>,
+                          h2: ({ children }) => <h2 className="text-3xl sm:text-4xl font-extrabold text-teal-300 mt-10 mb-5 tracking-tight">{children}</h2>,
+                          h3: ({ children }) => <h3 className="text-2xl sm:text-3xl font-bold text-teal-200/90 mt-8 mb-4">{children}</h3>,
+                          h4: ({ children }) => <h4 className="text-xl sm:text-2xl font-semibold text-teal-100/80 mt-6 mb-3">{children}</h4>,
+                          h5: ({ children }) => <h5 className="text-lg sm:text-xl font-semibold text-teal-200 mt-4 mb-2">{children}</h5>,
+                          h6: ({ children }) => <h6 className="text-base sm:text-lg font-semibold text-teal-300 mt-4 mb-2">{children}</h6>,
+                          p: ({ children }) => <p className="text-gray-300 leading-relaxed my-4 text-lg">{children}</p>,
+                          ul: ({ children }) => <ul className="list-disc list-inside my-4 pl-2 text-gray-300 space-y-1">{children}</ul>,
+                          ol: ({ children }) => <ol className="list-decimal list-inside my-4 pl-2 text-gray-300 space-y-1">{children}</ol>,
+                          li: ({ children }) => <li className="ml-2">{children}</li>,
+                          del: ({ children }) => <span className="line-through decoration-teal-400/60">{children}</span>,
+                          blockquote: ({ children }) => <blockquote className="border-l-4 border-teal-500 pl-4 ml-2 italic text-gray-400 my-4">{children}</blockquote>,
+                          pre: ({ children }) => <pre className="bg-[#04070c] border border-white/5 p-5 sm:p-6 rounded-2xl my-8 overflow-x-auto text-[0.9rem] cursor-pointer relative group shadow-lg" onClick={(e) => handleCopyCode(e.currentTarget.innerText)}>{children}</pre>,
+                          code: ({ children, className }) => {
+                            const isInline = !className;
+                            if (isInline) return <code className="text-teal-300 px-1.5 py-0.5 rounded text-sm">{children}</code>;
+                            return <code className="text-teal-300 text-sm block whitespace-pre">{children}</code>;
+                          },
+                          img: ({ src, alt, className }) => {
+                            if (!src) return null;
+                            return <img src={src as string} alt={alt || "Blog image"} className={className || "rounded-2xl border border-white/5 my-10 w-full shadow-2xl object-cover max-h-[600px]"} loading="lazy" onError={(e) => { e.currentTarget.style.display = "none"; }} />;
+                          },
+                        }}
                       >
-                        {children}
-                      </pre>
-                    ),
-                    code: ({ children, className }) => {
-                      const isInline = !className;
-                      if (isInline)
-                        return (
-                          <code className="text-teal-300 px-1.5 py-0.5 rounded text-sm">
-                            {children}
-                          </code>
-                        );
-                      return (
-                        <code className="text-teal-300 text-sm block whitespace-pre">
-                          {children}
-                        </code>
-                      );
-                    },
-                    img: ({ src, alt, className }) => {
-                      if (!src) return null;
-                      return (
-                        <img
-                          src={src as string}
-                          alt={alt || "Blog image"}
-                          className={
-                            className ||
-                            "rounded-2xl border border-white/5 my-10 w-full shadow-2xl object-cover max-h-[600px]"
-                          }
-                          loading="lazy"
-                          onError={(e) => {
-                            e.currentTarget.style.display = "none";
-                          }}
-                        />
-                      );
-                    },
-                  }}
-                >
-                  {finalContent}
-                </Markdown>
+                        {finalContent}
+                      </Markdown>
+                    );
+                  })()
+                )}
               </div>
             </div>
 
