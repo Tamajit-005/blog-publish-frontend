@@ -12,7 +12,7 @@
   "dependencies": {
     "@auth0/nextjs-auth0": "^3.8.0",
     "@emailjs/browser": "^4.4.1",
-    "@portabletext/react": "^8.0.1",
+    "@portabletext/react": "^3.2.4",
     "@sanity/client": "^8.4.0",
     "@sanity/image-url": "^2.1.1",
     "auth0": "^5.2.0",
