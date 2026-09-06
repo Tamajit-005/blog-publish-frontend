@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { FIXED_CATEGORIES } from "@/lib/categories";
+import CardColorPicker, { DEFAULT_CARD_COLOR } from "@/components/CardColorPicker";
 
 function insertTextAtCursor(
   el: HTMLTextAreaElement,
@@ -150,6 +151,7 @@ export default function CreateBlogPage() {
   const [description, setDescription] = useState("");
   const [content, setContent] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+const [cardColor, setCardColor] = useState(DEFAULT_CARD_COLOR);
   const [coverImage, setCoverImage] = useState("");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
 
@@ -381,6 +383,7 @@ export default function CreateBlogPage() {
           coverImage: coverImage || undefined,
           inlineImages,
           categories: selectedCategories,
+          cardColor,
         }),
       });
 
@@ -922,6 +925,18 @@ export default function CreateBlogPage() {
                       />
                     )}
                   </AnimatePresence>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400">
+                      Card Colour
+                    </label>
+                    <span className="text-xs text-gray-500">
+                      For Post Palette display
+                    </span>
+                  </div>
+                  <CardColorPicker value={cardColor} onChange={setCardColor} />
                 </div>
 
                 <div className="lg:hidden">

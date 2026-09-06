@@ -31,6 +31,7 @@ export interface IBlog extends Document {
   adminNotes?: string;
   deletionRejectedNotes?: string;
   sanityId?: string;
+  cardColor?: string;
   publishedAt?: Date;
   rejectedAt?: Date;
   createdAt: Date;
@@ -100,6 +101,7 @@ const BlogSchema = new mongoose.Schema<IBlog>(
     adminNotes: String,
     deletionRejectedNotes: String,
     sanityId: String,
+    cardColor: { type: String, default: null },
     publishedAt: Date,
     rejectedAt: Date,
   },

@@ -31,7 +31,11 @@ export async function PUT(
 
     const { id } = await params;
     const body = await req.json();
-    let { title, slug, content, description, coverImage, categories, inlineImages } = body;
+    let { title, slug, content, description, coverImage, categories, inlineImages, cardColor } = body;
+
+    if (cardColor !== undefined && !/^#[0-9A-Fa-f]{6}$/.test(cardColor)) {
+      return NextResponse.json({ error: "Invalid card colour" }, { status: 400 });
+    }
 
     await dbConnect();
     const blog = await Blog.findById(id);
@@ -82,6 +86,7 @@ export async function PUT(
       };
       blog.isEditRejected = false;
       blog.adminNotes = undefined;
+      if (cardColor) blog.cardColor = cardColor;
       await blog.save();
 
       await sendBlogEmail({
@@ -102,6 +107,7 @@ export async function PUT(
       blog.description = description.trim();
       blog.categories = categories;
       blog.inlineImages = processedInline;
+      if (cardColor) blog.cardColor = cardColor;
 
       if (coverImage === "") {
         blog.coverImage = undefined;
