@@ -78,6 +78,7 @@ export async function POST(req: NextRequest) {
       coverImage,
       categories,
       inlineImages,
+      cardColor,
     } = body;
 
     /* ───── Full Validation ───── */
@@ -103,6 +104,10 @@ export async function POST(req: NextRequest) {
 
     if (description.length < 10 || description.length > 300) {
       return NextResponse.json({ error: "Description must be between 10 and 300 characters" }, { status: 400 });
+    }
+
+    if (cardColor !== undefined && !/^#[0-9A-Fa-f]{6}$/.test(cardColor)) {
+      return NextResponse.json({ error: "Invalid card colour" }, { status: 400 });
     }
 
     const validation = validateInlineImages(inlineImages);
@@ -154,6 +159,7 @@ export async function POST(req: NextRequest) {
       coverImageName,
       categories,
       inlineImages: optimizedInlineImages, // WebP versions
+      cardColor: cardColor || "#EB4F2F",
       author: {
         auth0Id: auth.user.auth0Id,
         username: auth.user.username,
